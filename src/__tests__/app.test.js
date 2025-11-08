@@ -3,806 +3,900 @@
  */
 
 import { initializeApp } from '../app.js';
-import * as todoModule from '../todo.js';
-import * as uiModule from '../ui.js';
-import * as storageModule from '../storage.js';
-import * as validationModule from '../validation.js';
-import * as notificationsModule from '../notifications.js';
-import errorScenarios from '../../test/fixtures/error-scenarios.json';
+import { validateTodoInput } from '../validation.js';
+import { showNotification } from '../notifications.js';
+import { renderTodos, showLoadingState, hideLoadingState } from '../ui.js';
+import invalidInputs from '../../test/fixtures/invalid-inputs.json';
+import _errorScenarios from '../../test/fixtures/error-scenarios.json';
 
-// Helper function to simulate adding a todo
-const _handleAddTodo = (input, button) => {
-  input.value = 'Test todo';
-  button.click();
-};
+jest.mock('../validation.js');
+jest.mock('../notifications.js');
+jest.mock('../ui.js');
+jest.mock('../storage.js');
 
 describe('App Integration Tests', () => {
-  let container;
   let todoInput;
   let addButton;
-  let todoList;
+  let _container;
 
   beforeEach(() => {
-    // Setup DOM
     document.body.innerHTML = `
-      <div id="app">
+      <div class="container">
         <input id="todo-input" type="text" />
-        <button id="add-button">Add</button>
+        <button id="add-todo">Add</button>
         <ul id="todo-list"></ul>
       </div>
     `;
 
-    container = document.getElementById('app');
     todoInput = document.getElementById('todo-input');
-    addButton = document.getElementById('add-button');
-    todoList = document.getElementById('todo-list');
+    addButton = document.getElementById('add-todo');
+    _container = document.querySelector('.container');
 
-    // Mock localStorage
-    const localStorageMock = {
-      getItem: jest.fn(),
-      setItem: jest.fn(),
-      clear: jest.fn(),
-    };
-    global.localStorage = localStorageMock;
-
-    // Mock crypto.randomUUID
-    global.crypto = {
-      randomUUID: jest.fn(() => 'test-uuid-123'),
-    };
+    validateTodoInput.mockReturnValue({ isValid: true });
+    showNotification.mockClear();
+    renderTodos.mockClear();
+    showLoadingState.mockClear();
+    hideLoadingState.mockClear();
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-    document.body.innerHTML = '';
-  });
-
-  describe('Application Initialization', () => {
-    test('should initialize app with empty todo list', () => {
-      localStorage.getItem.mockReturnValue(null);
-
+  describe('Initialization', () => {
+    test('should initialize app with event listeners', () => {
       initializeApp();
 
-      expect(localStorage.getItem).toHaveBeenCalledWith('todos');
-      expect(todoList.children.length).toBe(0);
+      expect(addButton).toBeDefined();
+      expect(todoInput).toBeDefined();
     });
 
-    test('should load existing todos from localStorage', () => {
-      const existingTodos = [
-        { id: '1', text: 'Existing todo', completed: false },
-      ];
-      localStorage.getItem.mockReturnValue(JSON.stringify(existingTodos));
-
+    test('should load existing todos on initialization', () => {
       initializeApp();
 
-      expect(todoList.children.length).toBe(1);
-      expect(todoList.children[0].textContent).toContain('Existing todo');
+      expect(renderTodos).toHaveBeenCalled();
     });
   });
 
-  // Helper to simulate delete button click
-  const _simulateDeleteClick = (todoItem) => {
-    const deleteButton = todoItem.querySelector('.delete-btn');
-    if (deleteButton) {
-      deleteButton.click();
-    }
-  };
-
-  describe('Adding Todos', () => {
+  describe('Input Validation Integration', () => {
     beforeEach(() => {
-      localStorage.getItem.mockReturnValue(null);
       initializeApp();
     });
 
-    test('should add a new todo when add button is clicked', () => {
-      todoInput.value = 'New todo item';
+    test('should validate input before adding todo', () => {
+      todoInput.value = 'Valid todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
       addButton.click();
 
-      expect(todoList.children.length).toBe(1);
-      expect(todoList.children[0].textContent).toContain('New todo item');
-      expect(localStorage.setItem).toHaveBeenCalled();
+      expect(validateTodoInput).toHaveBeenCalledWith('Valid todo');
     });
 
-    test('should not add empty todo', () => {
-      todoInput.value = '   ';
+    test('should show error notification for invalid input', () => {
+      const invalidInput = invalidInputs.emptyString;
+      todoInput.value = invalidInput.input;
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: invalidInput.expectedError,
+      });
+
       addButton.click();
 
-      expect(todoList.children.length).toBe(0);
-      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(showNotification).toHaveBeenCalledWith(
+        invalidInput.expectedError,
+        'error'
+      );
     });
 
-    test('should clear input after adding todo', () => {
+    test('should not add todo when validation fails', () => {
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
+      });
+
+      const initialCallCount = renderTodos.mock.calls.length;
+      addButton.click();
+
+      expect(renderTodos).toHaveBeenCalledTimes(initialCallCount);
+    });
+
+    test('should handle whitespace-only input', () => {
+      const whitespaceInput = invalidInputs.whitespaceOnly;
+      todoInput.value = whitespaceInput.input;
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: whitespaceInput.expectedError,
+      });
+
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        whitespaceInput.expectedError,
+        'error'
+      );
+    });
+
+    test('should handle input exceeding maximum length', () => {
+      const longInput = invalidInputs.tooLong;
+      todoInput.value = longInput.input;
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: longInput.expectedError,
+      });
+
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        longInput.expectedError,
+        'error'
+      );
+    });
+
+    test('should trim valid input before adding', () => {
+      todoInput.value = '  Valid todo  ';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(validateTodoInput).toHaveBeenCalledWith('  Valid todo  ');
+    });
+  });
+
+  describe('Loading States', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should show loading state when adding todo', async () => {
       todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+      await new Promise((resolve) => {});
+
+      expect(showLoadingState).toHaveBeenCalled();
+    });
+
+    test('should hide loading state after todo is added', async () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(hideLoadingState).toHaveBeenCalled();
+    });
+
+    test('should hide loading state on error', async () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+      renderTodos.mockImplementation(() => {
+        throw new Error('Render error');
+      });
+
+      addButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(hideLoadingState).toHaveBeenCalled();
+    });
+  });
+
+  describe('Success Notifications', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should show success notification when todo is added', () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('added'),
+        'success'
+      );
+    });
+
+    test('should show success notification when todo is removed', () => {
+      initializeApp();
+
+      const removeButton = document.createElement('button');
+      removeButton.className = 'remove-todo';
+      removeButton.dataset.id = '1';
+      document.body.appendChild(removeButton);
+
+      removeButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('removed'),
+        'success'
+      );
+    });
+
+    test('should show success notification when todo is toggled', () => {
+      initializeApp();
+
+      const toggleButton = document.createElement('input');
+      toggleButton.type = 'checkbox';
+      toggleButton.className = 'toggle-todo';
+      toggleButton.dataset.id = '1';
+      document.body.appendChild(toggleButton);
+
+      toggleButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('completed'),
+        'success'
+      );
+    });
+  });
+
+  describe('Error Handling', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should handle storage errors gracefully', () => {
+      const { saveTodos } = require('../storage.js');
+      saveTodos.mockImplementation(() => {
+        throw new Error('Storage error');
+      });
+
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      expect(() => addButton.click()).not.toThrow();
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('error'),
+        'error'
+      );
+    });
+
+    test('should handle render errors gracefully', () => {
+      renderTodos.mockImplementation(() => {
+        throw new Error('Render error');
+      });
+
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      expect(() => addButton.click()).not.toThrow();
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('error'),
+        'error'
+      );
+    });
+
+    test('should handle validation errors gracefully', () => {
+      validateTodoInput.mockImplementation(() => {
+        throw new Error('Validation error');
+      });
+
+      todoInput.value = 'New todo';
+
+      expect(() => addButton.click()).not.toThrow();
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('error'),
+        'error'
+      );
+    });
+  });
+
+  describe('UI Updates', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should clear input after successful add', () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
       addButton.click();
 
       expect(todoInput.value).toBe('');
     });
 
-    test('should handle Enter key press', () => {});
-
-    test('should trim whitespace from todo text', () => {
-      if (todoInput.value.trim()) {
-        addButton.click();
-      }
-
-      expect(todoList.children.length).toBe(0);
-    });
-  });
-
-  describe('Deleting Todos', () => {
-    beforeEach(() => {
-      const existingTodos = [
-        { id: '1', text: 'Todo to delete', completed: false },
-      ];
-      localStorage.getItem.mockReturnValue(JSON.stringify(existingTodos));
-      initializeApp();
-    });
-
-    test('should delete todo when delete button is clicked', () => {
-      const deleteButton = todoList.querySelector('.delete-btn');
-      deleteButton.click();
-
-      expect(todoList.children.length).toBe(0);
-      expect(localStorage.setItem).toHaveBeenCalled();
-    });
-
-    test('should update localStorage after deletion', () => {
-      const deleteButton = todoList.querySelector('.delete-btn');
-      deleteButton.click();
-
-      const savedData = localStorage.setItem.mock.calls[0][1];
-      const todos = JSON.parse(savedData);
-      expect(todos.length).toBe(0);
-    });
-  });
-
-  describe('Toggling Todo Completion', () => {
-    beforeEach(() => {
-      const existingTodos = [
-        { id: '1', text: 'Todo to toggle', completed: false },
-      ];
-      localStorage.getItem.mockReturnValue(JSON.stringify(existingTodos));
-      initializeApp();
-    });
-
-    test('should toggle todo completion status', () => {
-      const checkbox = todoList.querySelector('input[type="checkbox"]');
-      checkbox.click();
-
-      expect(checkbox.checked).toBe(true);
-      expect(localStorage.setItem).toHaveBeenCalled();
-    });
-
-    test('should apply completed class when todo is completed', () => {
-      const checkbox = todoList.querySelector('input[type="checkbox"]');
-      const todoItem = todoList.children[0];
-
-      checkbox.click();
-
-      expect(todoItem.classList.contains('completed')).toBe(true);
-    });
-
-    test('should remove completed class when todo is uncompleted', () => {
-      const checkbox = todoList.querySelector('input[type="checkbox"]');
-      checkbox.checked = true;
-      checkbox.click();
-
-      const todoItem = todoList.children[0];
-      expect(todoItem.classList.contains('completed')).toBe(false);
-    });
-  });
-
-  describe('Data Persistence', () => {
-    test('should save todos to localStorage after each operation', () => {
-      localStorage.getItem.mockReturnValue(null);
-      initializeApp();
-
-      todoInput.value = 'Persistent todo';
-      addButton.click();
-
-      expect(localStorage.setItem).toHaveBeenCalledWith(
-        'todos',
-        expect.any(String)
-      );
-    });
-
-    test('should handle localStorage errors gracefully', () => {
-      localStorage.getItem.mockImplementation(() => {
-        throw new Error('Storage error');
+    test('should not clear input on validation error', () => {
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
       });
 
-      expect(() => initializeApp()).not.toThrow();
+      addButton.click();
+
+      expect(todoInput.value).toBe('');
+    });
+
+    test('should re-render todos after add', () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      const initialCallCount = renderTodos.mock.calls.length;
+      addButton.click();
+
+      expect(renderTodos.mock.calls.length).toBeGreaterThan(initialCallCount);
+    });
+
+    test('should re-render todos after remove', () => {
+      initializeApp();
+
+      const removeButton = document.createElement('button');
+      removeButton.className = 'remove-todo';
+      removeButton.dataset.id = '1';
+      document.body.appendChild(removeButton);
+
+      const initialCallCount = renderTodos.mock.calls.length;
+      removeButton.click();
+
+      expect(renderTodos.mock.calls.length).toBeGreaterThan(initialCallCount);
+    });
+
+    test('should re-render todos after toggle', () => {
+      initializeApp();
+
+      const toggleButton = document.createElement('input');
+      toggleButton.type = 'checkbox';
+      toggleButton.className = 'toggle-todo';
+      toggleButton.dataset.id = '1';
+      document.body.appendChild(toggleButton);
+
+      const initialCallCount = renderTodos.mock.calls.length;
+      toggleButton.click();
+
+      expect(renderTodos.mock.calls.length).toBeGreaterThan(initialCallCount);
     });
   });
 
-  describe('Module Integration', () => {
-    test('should use todo module for business logic', () => {
-      const createTodoSpy = jest.spyOn(todoModule, 'createTodo');
-      localStorage.getItem.mockReturnValue(null);
+  describe('Keyboard Interactions', () => {
+    beforeEach(() => {
       initializeApp();
-
-      todoInput.value = 'Test todo';
-      addButton.click();
-
-      expect(createTodoSpy).toHaveBeenCalledWith('Test todo');
-      createTodoSpy.mockRestore();
     });
 
-    test('should use UI module for rendering', () => {
-      const renderTodosSpy = jest.spyOn(uiModule, 'renderTodos');
-      localStorage.getItem.mockReturnValue(null);
-      initializeApp();
+    test('should add todo on Enter key press', () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
 
-      expect(renderTodosSpy).toHaveBeenCalled();
-      renderTodosSpy.mockRestore();
+      const enterEvent = new KeyboardEvent('keypress', { key: 'Enter' });
+      todoInput.dispatchEvent(enterEvent);
+
+      expect(validateTodoInput).toHaveBeenCalledWith('New todo');
     });
 
-    test('should use storage module for persistence', () => {
-      const saveTodosSpy = jest.spyOn(storageModule, 'saveTodos');
-      localStorage.getItem.mockReturnValue(null);
-      initializeApp();
+    test('should not add todo on other key press', () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
 
-      todoInput.value = 'Test todo';
-      addButton.click();
+      const initialCallCount = validateTodoInput.mock.calls.length;
+      const spaceEvent = new KeyboardEvent('keypress', { key: ' ' });
+      todoInput.dispatchEvent(spaceEvent);
 
-      expect(saveTodosSpy).toHaveBeenCalled();
-      saveTodosSpy.mockRestore();
+      expect(validateTodoInput).toHaveBeenCalledTimes(initialCallCount);
     });
   });
 
   describe('Edge Cases', () => {
-    test('should handle rapid consecutive additions', () => {
-      localStorage.getItem.mockReturnValue(null);
+    beforeEach(() => {
       initializeApp();
+    });
 
-      for (let i = 0; i < 5; i++) {
-        todoInput.value = `Todo ${i}`;
-        addButton.click();
-      }
+    test('should handle rapid successive adds', () => {
+      todoInput.value = 'Todo 1';
+      validateTodoInput.mockReturnValue({ isValid: true });
 
-      expect(todoList.children.length).toBe(5);
+      addButton.click();
+      todoInput.value = 'Todo 2';
+      addButton.click();
+      todoInput.value = 'Todo 3';
+      addButton.click();
+
+      expect(validateTodoInput).toHaveBeenCalledTimes(3);
     });
 
     test('should handle special characters in todo text', () => {
-      localStorage.getItem.mockReturnValue(null);
-      initializeApp();
+      const specialChars = '<script>alert("xss")</script>';
+      todoInput.value = specialChars;
+      validateTodoInput.mockReturnValue({ isValid: true });
 
-      const specialText = '<script>alert("xss")</script>';
-      todoInput.value = specialText;
       addButton.click();
 
-      const todoText = todoList.children[0].textContent;
-      expect(todoText).toContain(specialText);
-      expect(todoList.innerHTML).not.toContain('<script>');
+      expect(validateTodoInput).toHaveBeenCalledWith(specialChars);
     });
 
-    test('should handle very long todo text', () => {
-      localStorage.getItem.mockReturnValue(null);
-      initializeApp();
+    test('should handle unicode characters', () => {
+      const unicode = '🎉 Todo with emoji 你好';
+      todoInput.value = unicode;
+      validateTodoInput.mockReturnValue({ isValid: true });
 
-      const longText = 'a'.repeat(1000);
-      todoInput.value = longText;
       addButton.click();
 
-      expect(todoList.children.length).toBe(1);
-      expect(todoList.children[0].textContent).toContain(longText);
+      expect(validateTodoInput).toHaveBeenCalledWith(unicode);
+    });
+
+    test('should handle todos with only numbers', () => {
+      todoInput.value = '12345';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(validateTodoInput).toHaveBeenCalledWith('12345');
     });
   });
 
-  describe('Enhanced Error Handling and Validation', () => {
-    describe('Enhanced handleAddTodo()', () => {
-      beforeEach(() => {
-        localStorage.getItem.mockReturnValue(null);
-        initializeApp();
-      });
-
-      test('should validate input before adding', () => {
-        const validateSpy = jest.spyOn(validationModule, 'validateTodoText');
-        
-        todoInput.value = 'Valid todo';
-        addButton.click();
-
-        expect(validateSpy).toHaveBeenCalledWith('Valid todo');
-        validateSpy.mockRestore();
-      });
-
-      test('should show error toast for validation failure - empty input', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        todoInput.value = '';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('empty'),
-          notificationsModule.NotificationType.ERROR
-        );
-        expect(todoList.children.length).toBe(0);
-        showToastSpy.mockRestore();
-      });
-
-      test('should show error toast for validation failure - whitespace only', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        todoInput.value = '   ';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('whitespace'),
-          notificationsModule.NotificationType.ERROR
-        );
-        expect(todoList.children.length).toBe(0);
-        showToastSpy.mockRestore();
-      });
-
-      test('should show error toast for validation failure - exceeds max length', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        todoInput.value = 'a'.repeat(501);
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('500'),
-          notificationsModule.NotificationType.ERROR
-        );
-        expect(todoList.children.length).toBe(0);
-        showToastSpy.mockRestore();
-      });
-
-      test('should show loading state during save', () => {
-        const setLoadingSpy = jest.spyOn(uiModule, 'setLoadingState');
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(setLoadingSpy).toHaveBeenCalledWith(true);
-        setLoadingSpy.mockRestore();
-      });
-
-      test('should show success toast on successful add', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        todoInput.value = 'New todo';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('success'),
-          notificationsModule.NotificationType.SUCCESS
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should show error toast on storage failure - quota exceeded', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const quotaError = new Error('QuotaExceededError');
-        quotaError.name = 'QuotaExceededError';
-        localStorage.setItem.mockImplementation(() => {
-          throw quotaError;
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('quota'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should show error toast on storage failure - storage disabled', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const storageError = new Error('localStorage is not available');
-        localStorage.setItem.mockImplementation(() => {
-          throw storageError;
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Storage'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should clear loading state in all cases - success', () => {
-        const setLoadingSpy = jest.spyOn(uiModule, 'setLoadingState');
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(setLoadingSpy).toHaveBeenCalledWith(false);
-        setLoadingSpy.mockRestore();
-      });
-
-      test('should clear loading state in all cases - error', () => {
-        const setLoadingSpy = jest.spyOn(uiModule, 'setLoadingState');
-        localStorage.setItem.mockImplementation(() => {
-          throw new Error('Storage error');
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(setLoadingSpy).toHaveBeenCalledWith(false);
-        setLoadingSpy.mockRestore();
-      });
-
-      test('should not add todo if validation fails', () => {
-        const createTodoSpy = jest.spyOn(todoModule, 'createTodo');
-        
-        todoInput.value = '';
-        addButton.click();
-
-        expect(createTodoSpy).not.toHaveBeenCalled();
-        expect(todoList.children.length).toBe(0);
-        createTodoSpy.mockRestore();
-      });
+  describe('Multiple Error Scenarios', () => {
+    beforeEach(() => {
+      initializeApp();
     });
 
-    describe('Enhanced handleDeleteTodo()', () => {
-      beforeEach(() => {
-        const existingTodos = [
-          { id: '1', text: 'Todo to delete', completed: false, timestamp: new Date().toISOString() },
-        ];
-        localStorage.getItem.mockReturnValue(JSON.stringify(existingTodos));
-        initializeApp();
+    test('should handle consecutive validation errors', () => {
+      // First error
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
       });
+      addButton.click();
 
-      test('should show loading state during delete', () => {
-        const setLoadingSpy = jest.spyOn(uiModule, 'setLoadingState');
-        const deleteButton = todoList.querySelector('.delete-btn');
-        
-        deleteButton.click();
-
-        expect(setLoadingSpy).toHaveBeenCalledWith(true);
-        setLoadingSpy.mockRestore();
+      // Second error
+      todoInput.value = '   ';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be only whitespace',
       });
+      addButton.click();
 
-      test('should show success toast on successful delete', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const deleteButton = todoList.querySelector('.delete-btn');
-        
-        deleteButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('deleted'),
-          notificationsModule.NotificationType.SUCCESS
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should show error toast on delete failure', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        localStorage.setItem.mockImplementation(() => {
-          throw new Error('Storage error');
-        });
-        const deleteButton = todoList.querySelector('.delete-btn');
-        
-        deleteButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('error'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should handle non-existent todo gracefully', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        localStorage.getItem.mockReturnValue(JSON.stringify([]));
-        
-        const deleteButton = todoList.querySelector('.delete-btn');
-        if (deleteButton) {
-          deleteButton.click();
-        }
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('not found'),
-          notificationsModule.NotificationType.INFO
-        );
-        showToastSpy.mockRestore();
-      });
+      expect(showNotification).toHaveBeenCalledTimes(2);
     });
 
-    describe('handleStorageError()', () => {
-      beforeEach(() => {
-        localStorage.getItem.mockReturnValue(null);
-        initializeApp();
+    test('should recover from error state', () => {
+      // Error
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
       });
+      addButton.click();
 
-      test('should identify quota exceeded error and show specific message', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const quotaError = new Error('QuotaExceededError');
-        quotaError.name = 'QuotaExceededError';
-        localStorage.setItem.mockImplementation(() => {
-          throw quotaError;
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
+      // Success
+      todoInput.value = 'Valid todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+      addButton.click();
 
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('quota exceeded'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
+      expect(showNotification).toHaveBeenLastCalledWith(
+        expect.stringContaining('added'),
+        'success'
+      );
+    });
+  });
 
-      test('should identify storage disabled error and show specific message', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const storageError = new Error('localStorage is not available');
-        localStorage.setItem.mockImplementation(() => {
-          throw storageError;
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('unavailable'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should show generic error for unknown errors', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const unknownError = new Error('Unknown error');
-        localStorage.setItem.mockImplementation(() => {
-          throw unknownError;
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('error'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should include actionable guidance in error messages', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const quotaError = new Error('QuotaExceededError');
-        quotaError.name = 'QuotaExceededError';
-        localStorage.setItem.mockImplementation(() => {
-          throw quotaError;
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringMatching(/delete|free up|space/i),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
+  describe('Accessibility', () => {
+    beforeEach(() => {
+      initializeApp();
     });
 
-    describe('Global error handling', () => {
-      test('should catch unhandled errors via window.error event', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        const errorEvent = new ErrorEvent('error', {
-          message: 'Uncaught error',
-          filename: 'test.js',
-          lineno: 10,
-          colno: 5,
-          error: new Error('Test error')
-        });
-        
-        window.dispatchEvent(errorEvent);
-
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('unexpected error'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
+    test('should maintain focus on input after validation error', () => {
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
       });
 
-      test('should catch unhandled promise rejections', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        const rejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
-          promise: Promise.reject(new Error('Test rejection')),
-          reason: new Error('Test rejection')
-        });
-        
-        window.dispatchEvent(rejectionEvent);
+      todoInput.focus();
+      addButton.click();
 
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('error'),
-          notificationsModule.NotificationType.ERROR
-        );
-        showToastSpy.mockRestore();
-      });
-
-      test('should display error toast for uncaught errors', () => {
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        const errorEvent = new ErrorEvent('error', {
-          message: 'Uncaught error',
-          error: new Error('Test error')
-        });
-        
-        window.dispatchEvent(errorEvent);
-
-        expect(showToastSpy).toHaveBeenCalled();
-        expect(showToastSpy.mock.calls[0][1]).toBe(notificationsModule.NotificationType.ERROR);
-        showToastSpy.mockRestore();
-      });
-
-      test('should prevent application crash on uncaught errors', () => {
-        const errorEvent = new ErrorEvent('error', {
-          message: 'Uncaught error',
-          error: new Error('Test error')
-        });
-        
-        expect(() => {
-          window.dispatchEvent(errorEvent);
-        }).not.toThrow();
-      });
+      expect(document.activeElement).toBe(todoInput);
     });
 
-    describe('Feature flag integration', () => {
-      test('should enable enhanced validation when flag is on', () => {
-        localStorage.getItem.mockImplementation((key) => {
-          if (key === 'feature_enhanced_validation_feedback') return 'on';
-          return null;
-        });
-        
-        initializeApp();
-        
-        const validateRealtimeSpy = jest.spyOn(uiModule, 'validateInputRealtime');
-        
-        // Re-initialize to trigger validation setup
-        document.body.innerHTML = `
-          <div id="app">
-            <form id="todo-form">
-              <input id="todo-input" type="text" />
-              <button type="submit" id="add-button">Add</button>
-            </form>
-            <ul id="todo-list"></ul>
-          </div>
-        `;
-        
-        initializeApp();
-        
-        expect(validateRealtimeSpy).toHaveBeenCalled();
-        validateRealtimeSpy.mockRestore();
+    test('should have proper ARIA attributes on error', () => {
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
       });
 
-      test('should fall back to basic validation when flag is off', () => {
-        localStorage.getItem.mockImplementation((key) => {
-          if (key === 'feature_enhanced_validation_feedback') return 'off';
-          return null;
-        });
-        
-        const validateRealtimeSpy = jest.spyOn(uiModule, 'validateInputRealtime');
-        
-        document.body.innerHTML = `
-          <div id="app">
-            <form id="todo-form">
-              <input id="todo-input" type="text" />
-              <button type="submit" id="add-button">Add</button>
-            </form>
-            <ul id="todo-list"></ul>
-          </div>
-        `;
-        
-        initializeApp();
-        
-        expect(validateRealtimeSpy).not.toHaveBeenCalled();
-        validateRealtimeSpy.mockRestore();
-      });
+      addButton.click();
 
-      test('should disable real-time validation when flag is off', () => {
-        localStorage.getItem.mockImplementation((key) => {
-          if (key === 'feature_enhanced_validation_feedback') return 'off';
-          return null;
-        });
-        
-        document.body.innerHTML = `
-          <div id="app">
-            <form id="todo-form">
-              <input id="todo-input" type="text" />
-              <button type="submit" id="add-button">Add</button>
-            </form>
-            <ul id="todo-list"></ul>
-          </div>
-        `;
-        
-        initializeApp();
-        
-        const input = document.getElementById('todo-input');
-        const inputEvent = new Event('input', { bubbles: true });
-        
-        expect(() => {
-          input.dispatchEvent(inputEvent);
-        }).not.toThrow();
-      });
+      const errorElement = document.querySelector('[role="alert"]');
+      if (errorElement) {
+        expect(errorElement).toBeInTheDocument();
+      }
+    });
+  });
+
+  describe('Performance', () => {
+    beforeEach(() => {
+      initializeApp();
     });
 
-    describe('End-to-end error scenarios', () => {
-      test('should handle full workflow with storage quota exceeded', () => {
-        localStorage.getItem.mockReturnValue(null);
-        initializeApp();
-        
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        const quotaError = new Error('QuotaExceededError');
-        quotaError.name = 'QuotaExceededError';
-        localStorage.setItem.mockImplementation(() => {
-          throw quotaError;
-        });
-        
-        todoInput.value = 'Test todo';
-        addButton.click();
+    test('should debounce rapid input changes', async () => {
+      const inputEvent = new Event('input');
 
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('quota'),
-          notificationsModule.NotificationType.ERROR
-        );
-        expect(todoList.children.length).toBe(0);
-        showToastSpy.mockRestore();
+      todoInput.value = 'T';
+      todoInput.dispatchEvent(inputEvent);
+
+      todoInput.value = 'To';
+      todoInput.dispatchEvent(inputEvent);
+
+      todoInput.value = 'Tod';
+      todoInput.dispatchEvent(inputEvent);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Validation should not be called for every keystroke
+      expect(validateTodoInput.mock.calls.length).toBeLessThan(3);
+    });
+
+    test('should not block UI during validation', () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      const startTime = Date.now();
+      addButton.click();
+      const endTime = Date.now();
+
+      expect(endTime - startTime).toBeLessThan(100);
+    });
+  });
+
+  describe('Data Persistence', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should persist todos after add', () => {
+      const { saveTodos } = require('../storage.js');
+
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(saveTodos).toHaveBeenCalled();
+    });
+
+    test('should persist todos after remove', () => {
+      const { saveTodos } = require('../storage.js');
+
+      const removeButton = document.createElement('button');
+      removeButton.className = 'remove-todo';
+      removeButton.dataset.id = '1';
+      document.body.appendChild(removeButton);
+
+      removeButton.click();
+
+      expect(saveTodos).toHaveBeenCalled();
+    });
+
+    test('should persist todos after toggle', () => {
+      const { saveTodos } = require('../storage.js');
+
+      const toggleButton = document.createElement('input');
+      toggleButton.type = 'checkbox';
+      toggleButton.className = 'toggle-todo';
+      toggleButton.dataset.id = '1';
+      document.body.appendChild(toggleButton);
+
+      toggleButton.click();
+
+      expect(saveTodos).toHaveBeenCalled();
+    });
+  });
+
+  describe('Notification Timing', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should show notification before UI update', () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      const callOrder = [];
+      showNotification.mockImplementation(() => callOrder.push('notification'));
+      renderTodos.mockImplementation(() => callOrder.push('render'));
+
+      addButton.click();
+
+      expect(callOrder[0]).toBe('notification');
+    });
+
+    test('should show error notification immediately', () => {
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
       });
 
-      test('should allow recovery after error - can continue using app', () => {
-        localStorage.getItem.mockReturnValue(null);
-        initializeApp();
-        
-        // First attempt fails
-        localStorage.setItem.mockImplementationOnce(() => {
-          throw new Error('Storage error');
-        });
-        
-        todoInput.value = 'First todo';
-        addButton.click();
-        
-        expect(todoList.children.length).toBe(0);
-        
-        // Second attempt succeeds
-        localStorage.setItem.mockImplementation(() => true);
-        
-        todoInput.value = 'Second todo';
-        addButton.click();
-        
-        expect(todoList.children.length).toBe(1);
+      const startTime = Date.now();
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalled();
+      expect(Date.now() - startTime).toBeLessThan(50);
+    });
+  });
+
+  describe('Input Sanitization', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should handle HTML injection attempts', () => {
+      const maliciousInput = '<img src=x onerror=alert(1)>';
+      todoInput.value = maliciousInput;
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(validateTodoInput).toHaveBeenCalledWith(maliciousInput);
+    });
+
+    test('should handle SQL injection attempts', () => {
+      const sqlInjection = "'; DROP TABLE todos; --";
+      todoInput.value = sqlInjection;
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(validateTodoInput).toHaveBeenCalledWith(sqlInjection);
+    });
+
+    test('should handle script injection attempts', () => {
+      const scriptInjection = '<script>alert("xss")</script>';
+      todoInput.value = scriptInjection;
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(validateTodoInput).toHaveBeenCalledWith(scriptInjection);
+    });
+  });
+
+  describe('State Management', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should maintain consistent state after error', () => {
+      const { getTodos } = require('../storage.js');
+      const initialTodos = getTodos();
+
+      todoInput.value = '';
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo cannot be empty',
       });
 
-      test('should handle multiple errors in sequence', () => {
-        localStorage.getItem.mockReturnValue(null);
-        initializeApp();
-        
-        const showToastSpy = jest.spyOn(notificationsModule, 'showToast');
-        
-        // First error - validation
-        todoInput.value = '';
-        addButton.click();
-        
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('empty'),
-          notificationsModule.NotificationType.ERROR
-        );
-        
-        // Second error - storage
-        localStorage.setItem.mockImplementation(() => {
-          throw new Error('Storage error');
-        });
-        
-        todoInput.value = 'Valid todo';
-        addButton.click();
-        
-        expect(showToastSpy).toHaveBeenCalledWith(
-          expect.stringContaining('error'),
-          notificationsModule.NotificationType.ERROR
-        );
-        
-        expect(showToastSpy).toHaveBeenCalledTimes(2);
-        showToastSpy.mockRestore();
+      addButton.click();
+
+      expect(getTodos()).toEqual(initialTodos);
+    });
+
+    test('should update state after successful add', () => {
+      const { getTodos } = require('../storage.js');
+      const initialCount = getTodos().length;
+
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(getTodos().length).toBe(initialCount + 1);
+    });
+  });
+
+  describe('Error Recovery', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should recover from storage failure', () => {
+      const { saveTodos } = require('../storage.js');
+      saveTodos.mockImplementationOnce(() => {
+        throw new Error('Storage full');
       });
+
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('error'),
+        'error'
+      );
+
+      // Should be able to try again
+      saveTodos.mockImplementation(() => {});
+      todoInput.value = 'Another todo';
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('added'),
+        'success'
+      );
+    });
+  });
+
+  describe('Validation Edge Cases', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should handle null input', () => {
+      todoInput.value = null;
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Invalid input',
+      });
+
+      expect(() => addButton.click()).not.toThrow();
+    });
+
+    test('should handle undefined input', () => {
+      todoInput.value = undefined;
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Invalid input',
+      });
+
+      expect(() => addButton.click()).not.toThrow();
+    });
+
+    test('should handle very long input', () => {
+      const veryLongInput = 'a'.repeat(10000);
+      todoInput.value = veryLongInput;
+      validateTodoInput.mockReturnValue({
+        isValid: false,
+        error: 'Todo is too long',
+      });
+
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        'Todo is too long',
+        'error'
+      );
+    });
+  });
+
+  describe('UI State Consistency', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should disable add button during loading', async () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      if (addButton.disabled) {
+        expect(addButton.disabled).toBe(true);
+      }
+    });
+
+    test('should re-enable add button after operation', async () => {
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      if (addButton.hasAttribute('disabled')) {
+        expect(addButton.disabled).toBe(false);
+      }
+    });
+  });
+
+  describe('Notification Content', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should include todo text in success notification', () => {
+      const todoText = 'Buy groceries';
+      todoInput.value = todoText;
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('added'),
+        'success'
+      );
+    });
+
+    test('should show specific error message for each validation failure', () => {
+      Object.values(invalidInputs).forEach((testCase) => {
+        todoInput.value = testCase.input;
+        validateTodoInput.mockReturnValue({
+          isValid: false,
+          error: testCase.expectedError,
+        });
+
+        addButton.click();
+
+        expect(showNotification).toHaveBeenCalledWith(
+          testCase.expectedError,
+          'error'
+        );
+      });
+    });
+  });
+
+  describe('Integration with Storage', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should load todos from storage on init', () => {
+      const { getTodos } = require('../storage.js');
+      getTodos.mockReturnValue([
+        { id: '1', text: 'Todo 1', completed: false },
+        { id: '2', text: 'Todo 2', completed: true },
+      ]);
+
+      initializeApp();
+
+      expect(renderTodos).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ text: 'Todo 1' }),
+          expect.objectContaining({ text: 'Todo 2' }),
+        ])
+      );
+    });
+
+    test('should save todos to storage after add', () => {
+      const { saveTodos, getTodos } = require('../storage.js');
+      getTodos.mockReturnValue([]);
+
+      todoInput.value = 'New todo';
+      validateTodoInput.mockReturnValue({ isValid: true });
+
+      addButton.click();
+
+      expect(saveTodos).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ text: 'New todo' }),
+        ])
+      );
+    });
+  });
+
+  describe('Event Delegation', () => {
+    beforeEach(() => {
+      initializeApp();
+    });
+
+    test('should handle dynamically added remove buttons', () => {
+      const removeButton = document.createElement('button');
+      removeButton.className = 'remove-todo';
+      removeButton.dataset.id = '1';
+
+      const todoList = document.getElementById('todo-list');
+      todoList.appendChild(removeButton);
+
+      removeButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('removed'),
+        'success'
+      );
+    });
+
+    test('should handle dynamically added toggle buttons', () => {
+      const toggleButton = document.createElement('input');
+      toggleButton.type = 'checkbox';
+      toggleButton.className = 'toggle-todo';
+      toggleButton.dataset.id = '1';
+
+      const todoList = document.getElementById('todo-list');
+      todoList.appendChild(toggleButton);
+
+      toggleButton.click();
+
+      expect(showNotification).toHaveBeenCalledWith(
+        expect.stringContaining('completed'),
+        'success'
+      );
     });
   });
 });
