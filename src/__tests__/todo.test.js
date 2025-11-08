@@ -1,720 +1,717 @@
-import { Todo } from '../todo.js';
-import invalidInputs from '../../test/fixtures/invalid-inputs.json';
-import errorScenarios from '../../test/fixtures/error-scenarios.json';
+import { jest } from '@jest/globals';
+import {
+  createTodo,
+  addTodo,
+  removeTodo,
+  toggleTodo,
+  updateTodo,
+  getTodoById,
+  clearCompleted,
+  getCompletedCount,
+  getPendingCount,
+  getAllTodos,
+} from '../todo.js';
 
-describe('Todo', () => {
-  describe('Constructor', () => {
-    test('should create a todo with text', () => {
-      const todo = new Todo('Buy groceries');
-      expect(todo.text).toBe('Buy groceries');
-      expect(todo.completed).toBe(false);
-      expect(todo.id).toBeDefined();
+describe('Todo Module', () => {
+  describe('createTodo', () => {
+    test('should create a new todo with required properties', () => {
+      const text = 'Test todo';
+      const todo = createTodo(text);
+
+      expect(todo).toHaveProperty('id');
+      expect(todo).toHaveProperty('text', text);
+      expect(todo).toHaveProperty('completed', false);
+      expect(todo).toHaveProperty('createdAt');
+      expect(typeof todo.id).toBe('number');
+      expect(typeof todo.createdAt).toBe('string');
     });
 
-    test('should create a todo with text and completed status', () => {
-      const todo = new Todo('Buy groceries', true);
-      expect(todo.text).toBe('Buy groceries');
-      expect(todo.completed).toBe(true);
-    });
+    test('should create todos with unique IDs', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
 
-    test('should create a todo with text, completed status, and id', () => {
-      const todo = new Todo('Buy groceries', true, 'custom-id');
-      expect(todo.text).toBe('Buy groceries');
-      expect(todo.completed).toBe(true);
-      expect(todo.id).toBe('custom-id');
-    });
-
-    test('should generate a unique id if not provided', () => {
-      const todo1 = new Todo('Task 1');
-      const todo2 = new Todo('Task 2');
       expect(todo1.id).not.toBe(todo2.id);
     });
 
-    test('should handle empty text', () => {
-      const todo = new Todo('');
-      expect(todo.text).toBe('');
+    test('should create todo with valid ISO date string', () => {
+      const todo = createTodo('Test');
+      const date = new Date(todo.createdAt);
+
+      expect(date).toBeInstanceOf(Date);
+      expect(date.toString()).not.toBe('Invalid Date');
     });
 
-    test('should handle whitespace text', () => {
-      const todo = new Todo('   ');
-      expect(todo.text).toBe('   ');
+    test('should handle empty string text', () => {
+      const todo = createTodo('');
+
+      expect(todo.text).toBe('');
+      expect(todo).toHaveProperty('id');
+    });
+
+    test('should handle text with special characters', () => {
+      const text = 'Test @#$% todo & more';
+      const todo = createTodo(text);
+
+      expect(todo.text).toBe(text);
     });
 
     test('should handle very long text', () => {
       const longText = 'a'.repeat(1000);
-      const todo = new Todo(longText);
+      const todo = createTodo(longText);
+
       expect(todo.text).toBe(longText);
+      expect(todo.text.length).toBe(1000);
     });
 
-    test('should handle special characters in text', () => {
-      const specialText = '!@#$%^&*()_+-=[]{}|;:\'",.<>?/';
-      const todo = new Todo(specialText);
-      expect(todo.text).toBe(specialText);
-    });
+    test('should create todo with completed set to false by default', () => {
+      const todo = createTodo('Test');
 
-    test('should handle unicode characters', () => {
-      const unicodeText = '日本語 العربية Русский 中文';
-      const todo = new Todo(unicodeText);
-      expect(todo.text).toBe(unicodeText);
-    });
-
-    test('should handle emojis', () => {
-      const emojiText = '🎉 ✅ 🚀 💯';
-      const todo = new Todo(emojiText);
-      expect(todo.text).toBe(emojiText);
-    });
-
-    test('should handle null text', () => {
-      const todo = new Todo(null);
-      expect(todo.text).toBe(null);
-    });
-
-    test('should handle undefined text', () => {
-      const todo = new Todo(undefined);
-      expect(todo.text).toBe(undefined);
-    });
-
-    test('should handle number as text', () => {
-      const todo = new Todo(123);
-      expect(todo.text).toBe(123);
-    });
-
-    test('should handle boolean as text', () => {
-      const todo = new Todo(true);
-      expect(todo.text).toBe(true);
-    });
-
-    test('should handle object as text', () => {
-      const obj = { key: 'value' };
-      const todo = new Todo(obj);
-      expect(todo.text).toBe(obj);
-    });
-
-    test('should handle array as text', () => {
-      const arr = [1, 2, 3];
-      const todo = new Todo(arr);
-      expect(todo.text).toBe(arr);
-    });
-
-    test('should default completed to false', () => {
-      const todo = new Todo('Task');
       expect(todo.completed).toBe(false);
     });
 
-    test('should accept true for completed', () => {
-      const todo = new Todo('Task', true);
-      expect(todo.completed).toBe(true);
-    });
+    test('should create todo with timestamp close to current time', () => {
+      const before = new Date().toISOString();
+      const todo = createTodo('Test');
+      const after = new Date().toISOString();
 
-    test('should accept false for completed', () => {
-      const todo = new Todo('Task', false);
-      expect(todo.completed).toBe(false);
-    });
-
-    test('should handle truthy values for completed', () => {
-      const todo = new Todo('Task', 1);
-      expect(todo.completed).toBe(1);
-    });
-
-    test('should handle falsy values for completed', () => {
-      const todo = new Todo('Task', 0);
-      expect(todo.completed).toBe(0);
-    });
-
-    test('should handle null for completed', () => {
-      const todo = new Todo('Task', null);
-      expect(todo.completed).toBe(null);
-    });
-
-    test('should handle undefined for completed', () => {
-      const todo = new Todo('Task', undefined);
-      expect(todo.completed).toBe(undefined);
-    });
-
-    test('should accept custom id', () => {
-      const customId = 'my-custom-id';
-      const todo = new Todo('Task', false, customId);
-      expect(todo.id).toBe(customId);
-    });
-
-    test('should handle empty string as id', () => {
-      const todo = new Todo('Task', false, '');
-      expect(todo.id).toBe('');
-    });
-
-    test('should handle numeric id', () => {
-      const todo = new Todo('Task', false, 123);
-      expect(todo.id).toBe(123);
-    });
-
-    test('should handle null id', () => {
-      const todo = new Todo('Task', false, null);
-      expect(todo.id).toBe(null);
-    });
-
-    test('should handle undefined id by generating one', () => {
-      const todo = new Todo('Task', false, undefined);
-      expect(todo.id).toBeDefined();
-      expect(typeof todo.id).toBe('string');
+      expect(todo.createdAt >= before).toBe(true);
+      expect(todo.createdAt <= after).toBe(true);
     });
   });
 
-  describe('ID Generation', () => {
-    test('should generate UUID format id', () => {
-      const todo = new Todo('Task');
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      expect(todo.id).toMatch(uuidRegex);
+  describe('addTodo', () => {
+    test('should add a new todo to empty list', () => {
+      const todos = [];
+      const newTodo = createTodo('New todo');
+      const result = addTodo(todos, newTodo);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(newTodo);
     });
 
-    test('should generate different ids for different todos', () => {
-      const ids = new Set();
-      for (let i = 0; i < 100; i++) {
-        const todo = new Todo(`Task ${i}`);
-        ids.add(todo.id);
-      }
-      expect(ids.size).toBe(100);
+    test('should add a new todo to existing list', () => {
+      const existingTodo = createTodo('Existing todo');
+      const todos = [existingTodo];
+      const newTodo = createTodo('New todo');
+      const result = addTodo(todos, newTodo);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(existingTodo);
+      expect(result[1]).toEqual(newTodo);
     });
 
-    test('should use crypto.randomUUID if available', () => {
-      const todo = new Todo('Task');
-      expect(todo.id).toBeDefined();
-      expect(typeof todo.id).toBe('string');
+    test('should not mutate original todos array', () => {
+      const todos = [createTodo('Todo 1')];
+      const originalLength = todos.length;
+      const newTodo = createTodo('Todo 2');
+
+      addTodo(todos, newTodo);
+
+      expect(todos).toHaveLength(originalLength);
     });
 
-    test('should fallback to Math.random if crypto.randomUUID not available', () => {
-      const originalRandomUUID = global.crypto?.randomUUID;
-      if (global.crypto) {
-        delete global.crypto.randomUUID;
-      }
+    test('should return new array reference', () => {
+      const todos = [];
+      const newTodo = createTodo('New todo');
+      const result = addTodo(todos, newTodo);
 
-      const todo = new Todo('Task');
-      expect(todo.id).toBeDefined();
-      expect(typeof todo.id).toBe('string');
-
-      if (originalRandomUUID && global.crypto) {
-        global.crypto.randomUUID = originalRandomUUID;
-      }
-    });
-  });
-
-  describe('Toggle', () => {
-    test('should toggle completed from false to true', () => {
-      const todo = new Todo('Task', false);
-      todo.toggle();
-      expect(todo.completed).toBe(true);
+      expect(result).not.toBe(todos);
     });
 
-    test('should toggle completed from true to false', () => {
-      const todo = new Todo('Task', true);
-      todo.toggle();
-      expect(todo.completed).toBe(false);
+    test('should handle adding multiple todos sequentially', () => {
+      let todos = [];
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+
+      todos = addTodo(todos, todo1);
+      todos = addTodo(todos, todo2);
+      todos = addTodo(todos, todo3);
+
+      expect(todos).toHaveLength(3);
+      expect(todos[0]).toEqual(todo1);
+      expect(todos[1]).toEqual(todo2);
+      expect(todos[2]).toEqual(todo3);
     });
 
-    test('should toggle multiple times', () => {
-      const todo = new Todo('Task');
-      expect(todo.completed).toBe(false);
-      todo.toggle();
-      expect(todo.completed).toBe(true);
-      todo.toggle();
-      expect(todo.completed).toBe(false);
-      todo.toggle();
-      expect(todo.completed).toBe(true);
-    });
+    test('should preserve todo properties when adding', () => {
+      const todos = [];
+      const newTodo = {
+        id: 123,
+        text: 'Test',
+        completed: false,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      };
+      const result = addTodo(todos, newTodo);
 
-    test('should return the todo instance for chaining', () => {
-      const todo = new Todo('Task');
-      const result = todo.toggle();
-      expect(result).toBe(todo);
-    });
-
-    test('should allow chaining multiple toggles', () => {
-      const todo = new Todo('Task');
-      todo.toggle().toggle().toggle();
-      expect(todo.completed).toBe(true);
+      expect(result[0]).toEqual(newTodo);
+      expect(result[0].id).toBe(123);
+      expect(result[0].text).toBe('Test');
+      expect(result[0].completed).toBe(false);
+      expect(result[0].createdAt).toBe('2024-01-01T00:00:00.000Z');
     });
   });
 
-  describe('Update Text', () => {
-    test('should update text', () => {
-      const todo = new Todo('Old text');
-      todo.updateText('New text');
-      expect(todo.text).toBe('New text');
+  describe('removeTodo', () => {
+    test('should remove todo by id', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = removeTodo(todos, todo1.id);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(todo2);
     });
 
-    test('should update text multiple times', () => {
-      const todo = new Todo('Text 1');
-      todo.updateText('Text 2');
-      expect(todo.text).toBe('Text 2');
-      todo.updateText('Text 3');
-      expect(todo.text).toBe('Text 3');
+    test('should return empty array when removing last todo', () => {
+      const todo = createTodo('Only todo');
+      const todos = [todo];
+      const result = removeTodo(todos, todo.id);
+
+      expect(result).toHaveLength(0);
+      expect(result).toEqual([]);
     });
 
-    test('should return the todo instance for chaining', () => {
-      const todo = new Todo('Task');
-      const result = todo.updateText('New text');
-      expect(result).toBe(todo);
+    test('should not mutate original todos array', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const originalLength = todos.length;
+
+      removeTodo(todos, todo1.id);
+
+      expect(todos).toHaveLength(originalLength);
     });
 
-    test('should allow chaining with toggle', () => {
-      const todo = new Todo('Task');
-      todo.updateText('New text').toggle();
-      expect(todo.text).toBe('New text');
-      expect(todo.completed).toBe(true);
+    test('should return new array reference', () => {
+      const todo = createTodo('Todo');
+      const todos = [todo];
+      const result = removeTodo(todos, todo.id);
+
+      expect(result).not.toBe(todos);
     });
 
-    test('should handle empty string', () => {
-      const todo = new Todo('Task');
-      todo.updateText('');
-      expect(todo.text).toBe('');
+    test('should handle removing non-existent id', () => {
+      const todo = createTodo('Todo');
+      const todos = [todo];
+      const result = removeTodo(todos, 999999);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(todo);
     });
 
-    test('should handle whitespace', () => {
-      const todo = new Todo('Task');
-      todo.updateText('   ');
-      expect(todo.text).toBe('   ');
+    test('should handle empty todos array', () => {
+      const todos = [];
+      const result = removeTodo(todos, 1);
+
+      expect(result).toEqual([]);
     });
 
-    test('should handle special characters', () => {
-      const todo = new Todo('Task');
-      const specialText = '!@#$%^&*()';
-      todo.updateText(specialText);
-      expect(todo.text).toBe(specialText);
+    test('should remove correct todo from multiple todos', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+      const todos = [todo1, todo2, todo3];
+      const result = removeTodo(todos, todo2.id);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(todo1);
+      expect(result[1]).toEqual(todo3);
     });
 
-    test('should handle unicode', () => {
-      const todo = new Todo('Task');
-      const unicodeText = '日本語';
-      todo.updateText(unicodeText);
-      expect(todo.text).toBe(unicodeText);
-    });
+    test('should handle removing multiple todos sequentially', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+      let todos = [todo1, todo2, todo3];
 
-    test('should handle null', () => {
-      const todo = new Todo('Task');
-      todo.updateText(null);
-      expect(todo.text).toBe(null);
-    });
+      todos = removeTodo(todos, todo1.id);
+      expect(todos).toHaveLength(2);
 
-    test('should handle undefined', () => {
-      const todo = new Todo('Task');
-      todo.updateText(undefined);
-      expect(todo.text).toBe(undefined);
+      todos = removeTodo(todos, todo3.id);
+      expect(todos).toHaveLength(1);
+      expect(todos[0]).toEqual(todo2);
     });
   });
 
-  describe('Serialization', () => {
-    test('should serialize to JSON', () => {
-      const todo = new Todo('Task', false, 'id-123');
-      const json = JSON.stringify(todo);
-      const parsed = JSON.parse(json);
-      expect(parsed.text).toBe('Task');
-      expect(parsed.completed).toBe(false);
-      expect(parsed.id).toBe('id-123');
+  describe('toggleTodo', () => {
+    test('should toggle todo completion status from false to true', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result[0].completed).toBe(true);
     });
 
-    test('should deserialize from JSON', () => {
-      const json = JSON.stringify({
-        text: 'Task',
+    test('should toggle todo completion status from true to false', () => {
+      const todo = { ...createTodo('Test todo'), completed: true };
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result[0].completed).toBe(false);
+    });
+
+    test('should not mutate original todos array', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const originalCompleted = todo.completed;
+
+      toggleTodo(todos, todo.id);
+
+      expect(todo.completed).toBe(originalCompleted);
+    });
+
+    test('should return new array reference', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should only toggle specified todo', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = toggleTodo(todos, todo1.id);
+
+      expect(result[0].completed).toBe(true);
+      expect(result[1].completed).toBe(false);
+    });
+
+    test('should handle toggling non-existent id', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, 999999);
+
+      expect(result[0].completed).toBe(false);
+    });
+
+    test('should preserve other todo properties', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result[0].id).toBe(todo.id);
+      expect(result[0].text).toBe(todo.text);
+      expect(result[0].createdAt).toBe(todo.createdAt);
+    });
+
+    test('should handle multiple toggles', () => {
+      const todo = createTodo('Test todo');
+      let todos = [todo];
+
+      todos = toggleTodo(todos, todo.id);
+      expect(todos[0].completed).toBe(true);
+
+      todos = toggleTodo(todos, todo.id);
+      expect(todos[0].completed).toBe(false);
+
+      todos = toggleTodo(todos, todo.id);
+      expect(todos[0].completed).toBe(true);
+    });
+  });
+
+  describe('updateTodo', () => {
+    test('should update todo text', () => {
+      const todo = createTodo('Original text');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { text: 'Updated text' });
+
+      expect(result[0].text).toBe('Updated text');
+    });
+
+    test('should update todo completed status', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { completed: true });
+
+      expect(result[0].completed).toBe(true);
+    });
+
+    test('should update multiple properties at once', () => {
+      const todo = createTodo('Original text');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, {
+        text: 'Updated text',
         completed: true,
-        id: 'id-123',
       });
-      const parsed = JSON.parse(json);
-      const todo = new Todo(parsed.text, parsed.completed, parsed.id);
-      expect(todo.text).toBe('Task');
-      expect(todo.completed).toBe(true);
-      expect(todo.id).toBe('id-123');
+
+      expect(result[0].text).toBe('Updated text');
+      expect(result[0].completed).toBe(true);
     });
 
-    test('should handle round-trip serialization', () => {
-      const original = new Todo('Task', true, 'id-123');
-      const json = JSON.stringify(original);
-      const parsed = JSON.parse(json);
-      const restored = new Todo(parsed.text, parsed.completed, parsed.id);
-      expect(restored.text).toBe(original.text);
-      expect(restored.completed).toBe(original.completed);
-      expect(restored.id).toBe(original.id);
-    });
-  });
+    test('should not mutate original todos array', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const originalText = todo.text;
 
-  describe('Immutability', () => {
-    test('should not affect other todos when updating one', () => {
-      const todo1 = new Todo('Task 1');
-      const todo2 = new Todo('Task 2');
-      todo1.updateText('Updated Task 1');
-      expect(todo1.text).toBe('Updated Task 1');
-      expect(todo2.text).toBe('Task 2');
+      updateTodo(todos, todo.id, { text: 'Updated' });
+
+      expect(todo.text).toBe(originalText);
     });
 
-    test('should not affect other todos when toggling one', () => {
-      const todo1 = new Todo('Task 1', false);
-      const todo2 = new Todo('Task 2', false);
-      todo1.toggle();
-      expect(todo1.completed).toBe(true);
-      expect(todo2.completed).toBe(false);
-    });
-  });
+    test('should return new array reference', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { text: 'Updated' });
 
-  describe('Edge Cases with Fixtures', () => {
-    test('should handle invalid inputs from fixtures', () => {
-      invalidInputs.forEach((scenario) => {
-        if (scenario.operation === 'create') {
-          const todo = new Todo(scenario.input);
-          expect(todo).toBeDefined();
-          expect(todo.text).toBe(scenario.input);
-        }
-      });
+      expect(result).not.toBe(todos);
     });
 
-    test('should handle error scenarios from fixtures', () => {
-      errorScenarios.forEach((scenario) => {
-        if (scenario.type === 'invalid_todo_text') {
-          const todo = new Todo(scenario.input);
-          expect(todo).toBeDefined();
-        }
-      });
-    });
-  });
+    test('should only update specified todo', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = updateTodo(todos, todo1.id, { text: 'Updated' });
 
-  describe('Constructor Edge Cases', () => {
-    test('should handle constructor with no arguments', () => {
-      const todo = new Todo();
-      expect(todo.text).toBeUndefined();
-      expect(todo.completed).toBe(false);
-      expect(todo.id).toBeDefined();
+      expect(result[0].text).toBe('Updated');
+      expect(result[1].text).toBe('Todo 2');
     });
 
-    test('should handle constructor with only completed argument', () => {
-      const todo = new Todo(undefined, true);
-      expect(todo.text).toBeUndefined();
-      expect(todo.completed).toBe(true);
+    test('should handle updating non-existent id', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, 999999, { text: 'Updated' });
+
+      expect(result[0].text).toBe('Test todo');
     });
 
-    test('should handle constructor with only id argument', () => {
-      const todo = new Todo(undefined, undefined, 'custom-id');
-      expect(todo.text).toBeUndefined();
-      expect(todo.completed).toBe(false);
-      expect(todo.id).toBe('custom-id');
+    test('should preserve properties not being updated', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { text: 'Updated' });
+
+      expect(result[0].id).toBe(todo.id);
+      expect(result[0].completed).toBe(todo.completed);
+      expect(result[0].createdAt).toBe(todo.createdAt);
+    });
+
+    test('should handle empty updates object', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, {});
+
+      expect(result[0]).toEqual(todo);
     });
   });
 
-  describe('Method Chaining', () => {
-    test('should support complex method chaining', () => {
-      const todo = new Todo('Task');
-      todo.updateText('New Task').toggle().toggle().updateText('Final Task');
-      expect(todo.text).toBe('Final Task');
-      expect(todo.completed).toBe(false);
-    });
-  });
+  describe('getTodoById', () => {
+    test('should return todo with matching id', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = getTodoById(todos, todo1.id);
 
-  describe('Property Access', () => {
-    test('should allow direct property access', () => {
-      const todo = new Todo('Task');
-      expect(todo.text).toBe('Task');
-      expect(todo.completed).toBe(false);
-      expect(todo.id).toBeDefined();
+      expect(result).toEqual(todo1);
     });
 
-    test('should allow direct property modification', () => {
-      const todo = new Todo('Task');
-      todo.text = 'Modified';
-      todo.completed = true;
-      expect(todo.text).toBe('Modified');
-      expect(todo.completed).toBe(true);
-    });
-  });
+    test('should return undefined for non-existent id', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = getTodoById(todos, 999999);
 
-  describe('Type Coercion', () => {
-    test('should handle type coercion in comparisons', () => {
-      const todo = new Todo('Task', false);
-      expect(todo.completed == false).toBe(true);
-      expect(todo.completed === false).toBe(true);
+      expect(result).toBeUndefined();
     });
 
-    test('should handle truthy/falsy checks', () => {
-      const todo1 = new Todo('Task', true);
-      const todo2 = new Todo('Task', false);
-      expect(!!todo1.completed).toBe(true);
-      expect(!!todo2.completed).toBe(false);
-    });
-  });
+    test('should handle empty todos array', () => {
+      const todos = [];
+      const result = getTodoById(todos, 1);
 
-  describe('Object Methods', () => {
-    test('should work with Object.keys', () => {
-      const todo = new Todo('Task', false, 'id-123');
-      const keys = Object.keys(todo);
-      expect(keys).toContain('text');
-      expect(keys).toContain('completed');
-      expect(keys).toContain('id');
+      expect(result).toBeUndefined();
     });
 
-    test('should work with Object.values', () => {
-      const todo = new Todo('Task', false, 'id-123');
-      const values = Object.values(todo);
-      expect(values).toContain('Task');
-      expect(values).toContain(false);
-      expect(values).toContain('id-123');
+    test('should return first matching todo if duplicates exist', () => {
+      const todo1 = { id: 1, text: 'First', completed: false, createdAt: '' };
+      const todo2 = { id: 1, text: 'Second', completed: false, createdAt: '' };
+      const todos = [todo1, todo2];
+      const result = getTodoById(todos, 1);
+
+      expect(result === 1).toBe(true);
     });
 
-    test('should work with Object.entries', () => {
-      const todo = new Todo('Task', false, 'id-123');
-      const entries = Object.entries(todo);
-      expect(entries).toContainEqual(['text', 'Task']);
-      expect(entries).toContainEqual(['completed', false]);
-      expect(entries).toContainEqual(['id', 'id-123']);
-    });
-
-    test('should work with Object.assign', () => {
-      const todo = new Todo('Task');
-      const updated = Object.assign({}, todo, { text: 'Updated' });
-      expect(updated.text).toBe('Updated');
-      expect(todo.text).toBe('Task');
-    });
-
-    test('should work with spread operator', () => {
-      const todo = new Todo('Task', false, 'id-123');
-      const copy = { ...todo };
-      expect(copy.text).toBe('Task');
-      expect(copy.completed).toBe(false);
-      expect(copy.id).toBe('id-123');
-    });
-  });
-
-  describe('Array Methods', () => {
-    test('should work in array operations', () => {
-      const todos = [
-        new Todo('Task 1'),
-        new Todo('Task 2'),
-        new Todo('Task 3'),
-      ];
-      expect(todos.length).toBe(3);
-      expect(todos[0].text).toBe('Task 1');
-    });
-
-    test('should work with array map', () => {
-      const todos = [new Todo('Task 1'), new Todo('Task 2')];
-      const texts = todos.map((t) => t.text);
-      expect(texts).toEqual(['Task 1', 'Task 2']);
-    });
-
-    test('should work with array filter', () => {
-      const todos = [
-        new Todo('Task 1', true),
-        new Todo('Task 2', false),
-        new Todo('Task 3', true),
-      ];
-      const completed = todos.filter((t) => t.completed);
-      expect(completed.length).toBe(2);
-    });
-
-    test('should work with array reduce', () => {
-      const todos = [
-        new Todo('Task 1', true),
-        new Todo('Task 2', false),
-        new Todo('Task 3', true),
-      ];
-      const completedCount = todos.reduce(
-        (count, t) => (t.completed ? count + 1 : count),
-        0
+    test('should find todo in large list', () => {
+      const todos = Array.from({ length: 1000 }, (_, i) =>
+        createTodo(`Todo ${i}`)
       );
-      expect(completedCount).toBe(2);
-    });
+      const targetTodo = todos[500];
+      const result = getTodoById(todos, targetTodo.id);
 
-    test('should work with array find', () => {
-      const todos = [
-        new Todo('Task 1', false, 'id-1'),
-        new Todo('Task 2', false, 'id-2'),
-      ];
-      const found = todos.find((t) => t.id === 'id-2');
-      expect(found.text).toBe('Task 2');
-    });
-
-    test('should work with array some', () => {
-      const todos = [
-        new Todo('Task 1', false),
-        new Todo('Task 2', true),
-      ];
-      expect(todos.some((t) => t.completed)).toBe(true);
-    });
-
-    test('should work with array every', () => {
-      const todos = [
-        new Todo('Task 1', true),
-        new Todo('Task 2', true),
-      ];
-      expect(todos.every((t) => t.completed)).toBe(true);
+      expect(result).toEqual(targetTodo);
     });
   });
 
-  describe('Comparison', () => {
-    test('should compare by reference', () => {
-      const todo1 = new Todo('Task', false, 'id-1');
-      const todo2 = new Todo('Task', false, 'id-1');
-      expect(todo1 === todo2).toBe(false);
-      expect(todo1 == todo2).toBe(false);
+  describe('clearCompleted', () => {
+    test('should remove all completed todos', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todo3 = { ...createTodo('Todo 3'), completed: true };
+      const todos = [todo1, todo2, todo3];
+      const result = clearCompleted(todos);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(todo2);
     });
 
-    test('should compare by id', () => {
-      const todo1 = new Todo('Task', false, 'id-1');
-      const todo2 = new Todo('Task', false, 'id-1');
-      expect(todo1.id === todo2.id).toBe(true);
+    test('should return empty array when all todos are completed', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = { ...createTodo('Todo 2'), completed: true };
+      const todos = [todo1, todo2];
+      const result = clearCompleted(todos);
+
+      expect(result).toEqual([]);
     });
 
-    test('should compare by properties', () => {
-      const todo1 = new Todo('Task', false, 'id-1');
-      const todo2 = new Todo('Task', false, 'id-1');
-      expect(todo1.text === todo2.text).toBe(true);
-      expect(todo1.completed === todo2.completed).toBe(true);
-    });
-  });
+    test('should return all todos when none are completed', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = clearCompleted(todos);
 
-  describe('Cloning', () => {
-    test('should create shallow copy with spread', () => {
-      const original = new Todo('Task', false, 'id-1');
-      const copy = { ...original };
-      copy.text = 'Modified';
-      expect(original.text).toBe('Task');
-      expect(copy.text).toBe('Modified');
+      expect(result).toHaveLength(2);
+      expect(result).toEqual(todos);
     });
 
-    test('should create copy with Object.assign', () => {
-      const original = new Todo('Task', false, 'id-1');
-      const copy = Object.assign({}, original);
-      copy.text = 'Modified';
-      expect(original.text).toBe('Task');
-      expect(copy.text).toBe('Modified');
+    test('should not mutate original todos array', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const originalLength = todos.length;
+
+      clearCompleted(todos);
+
+      expect(todos).toHaveLength(originalLength);
     });
 
-    test('should create copy with JSON parse/stringify', () => {
-      const original = new Todo('Task', false, 'id-1');
-      const copy = JSON.parse(JSON.stringify(original));
-      expect(copy.text).toBe(original.text);
-      expect(copy.completed).toBe(original.completed);
-      expect(copy.id).toBe(original.id);
-    });
-  });
+    test('should return new array reference', () => {
+      const todos = [createTodo('Todo')];
+      const result = clearCompleted(todos);
 
-  describe('Validation', () => {
-    test('should validate text length', () => {
-      const shortText = 'a';
-      const longText = 'a'.repeat(500);
-      const todo1 = new Todo(shortText);
-      const todo2 = new Todo(longText);
-      expect(todo1.text.length).toBe(1);
-      expect(todo2.text.length).toBe(500);
+      expect(result).not.toBe(todos);
     });
 
-    test('should validate completed type', () => {
-      const todo = new Todo('Task', true);
-      expect(typeof todo.completed).toBe('boolean');
-    });
-
-    test('should validate id type', () => {
-      const todo = new Todo('Task');
-      expect(typeof todo.id).toBe('string');
-    });
-  });
-
-  describe('Performance', () => {
-    test('should create many todos quickly', () => {
-      const start = performance.now();
+    test('should handle empty todos array', () => {
       const todos = [];
-      for (let i = 0; i < 1000; i++) {
-        todos.push(new Todo(`Task ${i}`));
-      }
-      const end = performance.now();
-      expect(end - start).toBeLessThan(100);
-      expect(todos.length).toBe(1000);
-    });
+      const result = clearCompleted(todos);
 
-    test('should toggle many todos quickly', () => {
-      const todos = [];
-      for (let i = 0; i < 1000; i++) {
-        todos.push(new Todo(`Task ${i}`));
-      }
-      const start = performance.now();
-      todos.forEach((t) => t.toggle());
-      const end = performance.now();
-      expect(end - start).toBeLessThan(50);
-    });
-
-    test('should update many todos quickly', () => {
-      const todos = [];
-      for (let i = 0; i < 1000; i++) {
-        todos.push(new Todo(`Task ${i}`));
-      }
-      const start = performance.now();
-      todos.forEach((t, i) => t.updateText(`Updated ${i}`));
-      const end = performance.now();
-      expect(end - start).toBeLessThan(50);
+      expect(result).toEqual([]);
     });
   });
 
-  describe('Memory', () => {
-    test('should not leak memory on repeated operations', () => {
-      const todo = new Todo('Task');
-      for (let i = 0; i < 10000; i++) {
-        todo.toggle();
-        todo.updateText(`Task ${i}`);
-      }
-      expect(todo.text).toBe('Task 9999');
+  describe('getCompletedCount', () => {
+    test('should return count of completed todos', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todo3 = { ...createTodo('Todo 3'), completed: true };
+      const todos = [todo1, todo2, todo3];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(2);
+    });
+
+    test('should return 0 when no todos are completed', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(0);
+    });
+
+    test('should return total count when all todos are completed', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = { ...createTodo('Todo 2'), completed: true };
+      const todos = [todo1, todo2];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(2);
+    });
+
+    test('should return 0 for empty todos array', () => {
+      const todos = [];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(0);
+    });
+
+    test('should handle large number of todos', () => {
+      const todos = Array.from({ length: 1000 }, (_, i) => ({
+        ...createTodo(`Todo ${i}`),
+        completed: i % 2 === 0,
+      }));
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(500);
     });
   });
 
-  describe('Concurrency', () => {
-    test('should handle rapid updates', () => {
-      const todo = new Todo('Task');
+  describe('getPendingCount', () => {
+    test('should return count of pending todos', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+      const todos = [todo1, todo2, todo3];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(2);
+    });
+
+    test('should return total count when no todos are completed', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(2);
+    });
+
+    test('should return 0 when all todos are completed', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = { ...createTodo('Todo 2'), completed: true };
+      const todos = [todo1, todo2];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(0);
+    });
+
+    test('should return 0 for empty todos array', () => {
+      const todos = [];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(0);
+    });
+
+    test('should handle large number of todos', () => {
+      const todos = Array.from({ length: 1000 }, (_, i) => ({
+        ...createTodo(`Todo ${i}`),
+        completed: i % 2 === 0,
+      }));
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(500);
+    });
+  });
+
+  describe('getAllTodos', () => {
+    test('should return all todos', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = getAllTodos(todos);
+
+      expect(result).toEqual(todos);
+    });
+
+    test('should return empty array for empty input', () => {
+      const todos = [];
+      const result = getAllTodos(todos);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return new array reference', () => {
+      const todos = [createTodo('Todo')];
+      const result = getAllTodos(todos);
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should not mutate original array', () => {
+      const todo = createTodo('Test');
+      const todos = [todo];
+      const result = getAllTodos(todos);
+
+      result.push(createTodo('New'));
+
+      expect(todos).toHaveLength(1);
+    });
+  });
+
+  describe('Edge Cases and Error Handling', () => {
+    test('should handle null todo in getTodoById', () => {
+      const todo = createTodo('Test');
+      const todos = [todo, null];
+      const result = getTodoById(todos, todo.id);
+
+      expect(result).toEqual(todo);
+    });
+
+    test('should handle undefined in todos array', () => {
+      const todo = createTodo('Test');
+      const todos = [todo, undefined];
+      const result = getTodoById(todos, todo.id);
+
+      expect(result).toEqual(todo);
+    });
+
+    test('should handle very large todo lists', () => {
+      const todos = Array.from({ length: 10000 }, (_, i) =>
+        createTodo(`Todo ${i}`)
+      );
+
+      expect(todos).toHaveLength(10000);
+      expect(getCompletedCount(todos)).toBe(0);
+      expect(getPendingCount(todos)).toBe(10000);
+    });
+
+    test('should handle todos with same text but different ids', () => {
+      const todo1 = createTodo('Same text');
+      const todo2 = createTodo('Same text');
+      const todos = [todo1, todo2];
+
+      expect(todo1.id).not.toBe(todo2.id);
+      expect(getTodoById(todos, todo1.id)).toEqual(todo1);
+      expect(getTodoById(todos, todo2.id)).toEqual(todo2);
+    });
+
+    test('should handle rapid sequential operations', () => {
+      let todos = [];
+
+      // Add multiple todos
       for (let i = 0; i < 100; i++) {
-        todo.updateText(`Task ${i}`);
-      }
-      expect(todo.text).toBe('Task 99');
-    });
-
-    test('should handle rapid toggles', () => {
-      const todo = new Todo('Task');
-      for (let i = 0; i < 100; i++) {
-        todo.toggle();
-      }
-      expect(todo.completed).toBe(false);
-    });
-  });
-
-  describe('Integration with Storage', () => {
-    test('should be compatible with localStorage serialization', () => {
-      const todo = new Todo('Task', false, 'id-1');
-      const serialized = JSON.stringify(todo);
-      const deserialized = JSON.parse(serialized);
-      expect(deserialized.text).toBe(todo.text);
-      expect(deserialized.completed).toBe(todo.completed);
-      expect(deserialized.id).toBe(todo.id);
-    });
-  });
-
-  describe('Crypto Fallback', () => {
-    test('should handle missing crypto.randomUUID gracefully', () => {
-      const originalCrypto = global.crypto;
-      global.crypto = undefined;
-
-      const todo = new Todo('Task');
-      expect(todo.id).toBeDefined();
-      expect(typeof todo.id).toBe('string');
-      expect(todo.id.length).toBeGreaterThan(0);
-
-      global.crypto = originalCrypto;
-    });
-
-    test('should use fallback UUID generation', () => {
-      const randomUUIDBackup = global.crypto?.randomUUID;
-      if (global.crypto) {
-        delete global.crypto.randomUUID;
+        todos = addTodo(todos, createTodo(`Todo ${i}`));
       }
 
-      const todo = new Todo('Task');
-      expect(todo.id).toBeDefined();
-      expect(typeof todo.id).toBe('string');
+      expect(todos).toHaveLength(100);
 
-      if (randomUUIDBackup && global.crypto) {
-        global.crypto.randomUUID = randomUUIDBackup;
+      // Toggle some todos
+      for (let i = 0; i < 50; i++) {
+        todos = toggleTodo(todos, todos[i].id);
       }
+
+      expect(getCompletedCount(todos)).toBe(50);
+
+      // Remove some todos
+      for (let i = 0; i < 25; i++) {
+        todos = removeTodo(todos, todos[0].id);
+      }
+
+      expect(todos).toHaveLength(75);
+    });
+
+    test('should maintain data integrity through complex operations', () => {
+      let todos = [];
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+
+      todos = addTodo(todos, todo1);
+      todos = addTodo(todos, todo2);
+      todos = toggleTodo(todos, todo1.id);
+      todos = updateTodo(todos, todo2.id, { text: 'Updated Todo 2' });
+
+      expect(todos).toHaveLength(2);
+      expect(todos[0].completed).toBe(true);
+      expect(todos[1].text).toBe('Updated Todo 2');
+      expect(todos[0].id).toBe(todo1.id);
+      expect(todos[1].id).toBe(todo2.id);
+    });
+
+    test('should handle null for non-existent id in getTodoById', () => {
+      const todo = createTodo('Test');
+      const todos = [todo];
+      const result = getTodoById(todos, 999999);
+
+      expect(result === null).toBe(true);
     });
   });
 });
