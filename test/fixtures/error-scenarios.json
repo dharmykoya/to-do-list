@@ -1,0 +1,76 @@
+{
+  "quotaExceeded": {
+    "errorType": "QuotaExceededError",
+    "message": "Storage quota exceeded",
+    "expectedToastMessage": "Storage limit reached. Please delete some tasks.",
+    "simulationData": {
+      "description": "Simulate localStorage quota exceeded by filling storage",
+      "mockBehavior": "localStorage.setItem throws QuotaExceededError"
+    }
+  },
+  "storageDisabled": {
+    "errorType": "SecurityError",
+    "message": "localStorage is disabled",
+    "expectedToastMessage": "Storage is unavailable. Please enable cookies.",
+    "simulationData": {
+      "description": "Simulate localStorage disabled in private browsing or security settings",
+      "mockBehavior": "localStorage access throws SecurityError"
+    }
+  },
+  "corruptedData": {
+    "errorType": "SyntaxError",
+    "message": "Invalid JSON",
+    "expectedToastMessage": "Data corruption detected. Storage cleared.",
+    "simulationData": {
+      "description": "Simulate corrupted JSON data in localStorage",
+      "corruptedValue": "{invalid json syntax}",
+      "mockBehavior": "JSON.parse throws SyntaxError"
+    }
+  },
+  "networkError": {
+    "errorType": "NetworkError",
+    "message": "Network unavailable",
+    "expectedToastMessage": "Operation failed. Please try again.",
+    "simulationData": {
+      "description": "Simulate network-related failures during async operations",
+      "mockBehavior": "Network request fails with NetworkError"
+    }
+  },
+  "unknownError": {
+    "errorType": "Error",
+    "message": "Unknown error occurred",
+    "expectedToastMessage": "An unexpected error occurred.",
+    "simulationData": {
+      "description": "Simulate unexpected errors not covered by specific error types",
+      "mockBehavior": "Generic Error thrown during operation"
+    }
+  },
+  "storageAccessDenied": {
+    "errorType": "DOMException",
+    "message": "Access to localStorage denied",
+    "expectedToastMessage": "Storage is unavailable. Please enable cookies.",
+    "simulationData": {
+      "description": "Simulate DOMException when localStorage access is denied",
+      "mockBehavior": "localStorage access throws DOMException with SECURITY_ERR"
+    }
+  },
+  "dataTypeMismatch": {
+    "errorType": "TypeError",
+    "message": "Invalid data type in storage",
+    "expectedToastMessage": "Data corruption detected. Storage cleared.",
+    "simulationData": {
+      "description": "Simulate type errors when reading malformed data",
+      "corruptedValue": "null",
+      "mockBehavior": "Operations on null/undefined throw TypeError"
+    }
+  },
+  "maxLengthExceeded": {
+    "errorType": "ValidationError",
+    "message": "Storage value exceeds maximum length",
+    "expectedToastMessage": "Storage limit reached. Please delete some tasks.",
+    "simulationData": {
+      "description": "Simulate storage value exceeding browser limits",
+      "mockBehavior": "localStorage.setItem fails due to value size"
+    }
+  }
+}
