@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A simple, responsive to-do list application with local storage persistence">
+    <meta name="theme-color" content="#4a90e2">
+    <title>Simple To-Do List</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header role="banner">
+        <h1>Simple To-Do List</h1>
+    </header>
+
+    <main role="main" id="main-content">
+        <section class="todo-container" aria-labelledby="todo-heading">
+            <h2 id="todo-heading" class="visually-hidden">Task Management</h2>
+            
+            <form id="todo-form" class="todo-form" aria-label="Add new task form" novalidate>
+                <div class="form-group">
+                    <label for="todo-input" class="visually-hidden">New task input</label>
+                    <input 
+                        type="text" 
+                        id="todo-input" 
+                        class="todo-input" 
+                        placeholder="Add a new task..." 
+                        aria-label="New task input"
+                        aria-required="true"
+                        aria-describedby="input-hint"
+                        required
+                        maxlength="500"
+                        autocomplete="off"
+                    >
+                    <span id="input-hint" class="visually-hidden">Enter a task description and press Add Task button or Enter key</span>
+                </div>
+                <button 
+                    type="submit" 
+                    class="btn btn--primary" 
+                    aria-label="Add new task to list"
+                >
+                    Add Task
+                </button>
+            </form>
+
+            <div class="todo-list-container">
+                <ul 
+                    id="todo-list" 
+                    class="todo-list" 
+                    role="list" 
+                    aria-label="Task list"
+                    aria-live="polite"
+                    aria-atomic="false"
+                >
+                    <!-- Tasks will be dynamically inserted here -->
+                </ul>
+                <div id="empty-state" class="empty-state" role="status" aria-live="polite">
+                    <p>No tasks yet. Add one above to get started!</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer role="contentinfo" class="footer">
+        <p>&copy; <span id="current-year"></span> Simple To-Do List. All rights reserved.</p>
+    </footer>
+
+    <script type="module" src="src/app.js"></script>
+    <noscript>
+        <div class="noscript-warning" role="alert">
+            <p>This application requires JavaScript to be enabled. Please enable JavaScript in your browser settings to use this application.</p>
+        </div>
+    </noscript>
+</body>
+</html>
