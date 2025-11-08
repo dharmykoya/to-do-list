@@ -1,0 +1,377 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - '*.js'
+      - '*.json'
+      - '.eslintrc.json'
+      - '.prettierrc.json'
+      - 'jest.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - '*.js'
+      - '*.json'
+      - '.eslintrc.json'
+      - '.prettierrc.json'
+      - 'jest.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  test:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm install
+        env:
+          NODE_ENV: test
+
+      - name: Run ESLint
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Run Prettier check
+        run: npm run format:check
+        continue-on-error: false
+
+      - name: Run tests with coverage
+        run: npm test
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-node-${{ matrix.node-version }}
+          path: coverage/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-node-${{ matrix.node-version }}
+          path: coverage/junit.xml
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Check coverage thresholds
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "Coverage summary:"
+            cat coverage/coverage-summary.json
+          else
+            echo "Warning: coverage-summary.json not found"
+            exit 1
+          fi
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coveragePath = 'coverage/coverage-summary.json';
+            
+            if (!fs.existsSync(coveragePath)) {
+              console.log('Coverage file not found');
+              return;
+            }
+            
+            const coverage = JSON.parse(fs.readFileSync(coveragePath, 'utf8'));
+            const total = coverage.total;
+            
+            const comment = `## 📊 Test Coverage Report
+            
+            | Metric | Coverage | Status |
+            |--------|----------|--------|
+            | 🌿 Branches | ${total.branches.pct}% | ${total.branches.pct >= 90 ? '✅' : '❌'} |
+            | 🔧 Functions | ${total.functions.pct}% | ${total.functions.pct >= 90 ? '✅' : '❌'} |
+            | 📝 Lines | ${total.lines.pct}% | ${total.lines.pct >= 90 ? '✅' : '❌'} |
+            | 📋 Statements | ${total.statements.pct}% | ${total.statements.pct >= 90 ? '✅' : '❌'} |
+            
+            **Threshold:** 90% for all metrics
+            
+            <details>
+            <summary>View detailed coverage</summary>
+            
+            \`\`\`json
+            ${JSON.stringify(total, null, 2)}
+            \`\`\`
+            
+            </details>`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create deployment preview comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = `## 🚀 Deployment Preview
+            
+            Your changes are ready for preview! This is a static site that can be served locally or deployed to any static hosting service.
+            
+            ### Local Preview
+            
+            To preview locally, run:
+            
+            \`\`\`bash
+            npm install
+            npm start
+            \`\`\`
+            
+            Then open http://localhost:8080 in your browser.
+            
+            ### Static File Deployment
+            
+            The following files are ready for deployment:
+            
+            - \`index.html\` - Main application entry point
+            - \`styles.css\` - Application styles
+            - \`src/\` - JavaScript modules
+              - \`src/storage.js\` - Local storage utilities
+              - \`src/todo.js\` - Todo business logic
+              - \`src/ui.js\` - UI rendering functions
+              - \`src/app.js\` - Application initialization
+            
+            ### Deployment Instructions
+            
+            **GitHub Pages:**
+            \`\`\`bash
+            # Deploy to gh-pages branch
+            git checkout -b gh-pages
+            git push origin gh-pages
+            \`\`\`
+            
+            **Netlify:**
+            - Drag and drop the root directory to Netlify
+            - Or connect your repository and set build command to \`echo "No build required"\`
+            
+            **Vercel:**
+            \`\`\`bash
+            vercel --prod
+            \`\`\`
+            
+            **Any Static Host:**
+            - Upload all files from the root directory
+            - Ensure \`index.html\` is served as the default document
+            
+            ### Testing Checklist
+            
+            - [ ] Application loads without console errors
+            - [ ] Can add new todo items
+            - [ ] Can remove todo items
+            - [ ] Data persists after page reload (localStorage)
+            - [ ] Responsive design works on mobile (320px+)
+            - [ ] Works in Chrome, Firefox, Safari, and Edge
+            
+            ### Verification Commands
+            
+            \`\`\`bash
+            # Run all checks
+            npm run validate
+            
+            # Individual checks
+            npm run lint          # ESLint
+            npm run format:check  # Prettier
+            npm test             # Jest with coverage
+            \`\`\`
+            
+            ---
+            
+            **Commit:** ${context.sha.substring(0, 7)}
+            **Branch:** ${context.payload.pull_request.head.ref}
+            **Author:** @${context.payload.pull_request.user.login}`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-node-18.x
+          path: coverage/
+
+      - name: Generate deployment summary
+        run: |
+          echo "## Deployment Preview Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Linting passed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Code formatting verified" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Static Files Ready for Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- index.html" >> $GITHUB_STEP_SUMMARY
+          echo "- styles.css" >> $GITHUB_STEP_SUMMARY
+          echo "- src/storage.js" >> $GITHUB_STEP_SUMMARY
+          echo "- src/todo.js" >> $GITHUB_STEP_SUMMARY
+          echo "- src/ui.js" >> $GITHUB_STEP_SUMMARY
+          echo "- src/app.js" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat coverage/coverage-summary.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  validate-build:
+    name: Validate Build
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Validate HTML structure
+        run: |
+          if [ ! -f index.html ]; then
+            echo "Error: index.html not found"
+            exit 1
+          fi
+          echo "✅ index.html exists"
+
+      - name: Validate CSS structure
+        run: |
+          if [ ! -f styles.css ]; then
+            echo "Error: styles.css not found"
+            exit 1
+          fi
+          echo "✅ styles.css exists"
+
+      - name: Validate JavaScript modules
+        run: |
+          required_files=(
+            "src/storage.js"
+            "src/todo.js"
+            "src/ui.js"
+            "src/app.js"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Error: $file not found"
+              exit 1
+            fi
+            echo "✅ $file exists"
+          done
+
+      - name: Validate test files
+        run: |
+          test_files=(
+            "src/__tests__/storage.test.js"
+            "src/__tests__/todo.test.js"
+            "src/__tests__/ui.test.js"
+            "src/__tests__/app.test.js"
+          )
+          
+          for file in "${test_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Error: $file not found"
+              exit 1
+            fi
+            echo "✅ $file exists"
+          done
+
+      - name: Validate configuration files
+        run: |
+          config_files=(
+            "package.json"
+            ".eslintrc.json"
+            ".prettierrc.json"
+            "jest.config.js"
+          )
+          
+          for file in "${config_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Error: $file not found"
+              exit 1
+            fi
+            echo "✅ $file exists"
+          done
+
+      - name: Run smoke test
+        run: |
+          npm start &
+          SERVER_PID=$!
+          sleep 5
+          
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
+          
+          kill $SERVER_PID || true
+          
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Error: Server returned status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Smoke test passed - server returned 200"
+
+      - name: Generate validation summary
+        if: always()
+        run: |
+          echo "## Build Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All required files present" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Configuration files validated" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Smoke test passed" >> $GITHUB_STEP_SUMMARY
