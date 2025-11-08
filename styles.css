@@ -36,6 +36,9 @@
   --color-error: #dc2626;
   --color-error-hover: #b91c1c;
   --color-error-active: #991b1b;
+  --color-success: #16a34a;
+  --color-success-hover: #15803d;
+  --color-info: #2563eb;
   --color-border: #e5e7eb;
   --color-border-focus: #4f46e5;
   --color-shadow: rgba(0, 0, 0, 0.1);
@@ -177,6 +180,24 @@ body {
   opacity: 0.6;
 }
 
+.form__input--error {
+  border-color: var(--color-error);
+}
+
+.form__input--error:focus {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.input__error {
+  color: var(--color-error);
+  font-size: var(--font-size-medium);
+  margin-top: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  animation: slideDown 0.2s ease;
+}
+
 .form__button {
   padding: var(--spacing-md) var(--spacing-2xl);
   font-size: var(--font-size-base);
@@ -212,6 +233,96 @@ body {
   cursor: not-allowed;
   opacity: 0.6;
   transform: none;
+}
+
+.button--loading {
+  position: relative;
+  color: transparent;
+  pointer-events: none;
+}
+
+.button--loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid white;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.button--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+ * Toast Notification Styles
+ * ========================================================================== */
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  min-width: 300px;
+  max-width: 500px;
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: slideInRight 0.3s ease;
+  z-index: 1000;
+}
+
+.toast--success {
+  background-color: var(--color-success);
+  color: white;
+}
+
+.toast--error {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.toast--info {
+  background-color: var(--color-info);
+  color: white;
+}
+
+.toast__message {
+  flex: 1;
+  margin-right: var(--spacing-md);
+}
+
+.toast__close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 20px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  opacity: 0.8;
+  transition: opacity var(--transition-fast);
+}
+
+.toast__close:hover {
+  opacity: 1;
+}
+
+.toast__close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.toast--hiding {
+  animation: slideOutRight 0.3s ease;
 }
 
 /* ============================================================================
@@ -326,6 +437,45 @@ body {
 }
 
 /* ============================================================================
+ * Animations
+ * ========================================================================== */
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  to {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+/* ============================================================================
  * Utility Classes
  * ========================================================================== */
 
@@ -411,6 +561,13 @@ body {
     width: 100%;
     padding: var(--spacing-md);
   }
+
+  .toast {
+    min-width: auto;
+    max-width: calc(100vw - 40px);
+    left: 20px;
+    right: 20px;
+  }
 }
 
 /* Medium devices (tablets, 600px and up) */
@@ -446,7 +603,8 @@ body {
   }
 
   .form,
-  .todo-item__delete-btn {
+  .todo-item__delete-btn,
+  .toast {
     display: none;
   }
 
@@ -473,6 +631,18 @@ body {
   .todo-item {
     animation: none;
   }
+
+  .toast {
+    animation: none;
+  }
+
+  .toast--hiding {
+    animation: none;
+  }
+
+  .button--loading::after {
+    animation: none;
+  }
 }
 
 /* ============================================================================
@@ -492,6 +662,10 @@ body {
 
   .form__button,
   .todo-item__delete-btn {
+    border: 2px solid currentColor;
+  }
+
+  .toast {
     border: 2px solid currentColor;
   }
 }
