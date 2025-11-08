@@ -10,13 +10,21 @@
 
 import { getTodos, saveTodos } from './storage.js';
 import { createTodo, deleteTodo } from './todo.js';
-import { renderTodos, clearInput } from './ui.js';
+import { renderTodos, clearInput, validateInputRealtime, setLoadingState } from './ui.js';
+import { validateTodoText } from './validation.js';
+import { showToast, NotificationType } from './notifications.js';
 
 /**
  * Feature flag key for localStorage
  * @constant {string}
  */
 const FEATURE_FLAG_KEY = 'feature_todo_list_ui';
+
+/**
+ * Feature flag key for enhanced validation feedback
+ * @constant {string}
+ */
+const ENHANCED_VALIDATION_FLAG_KEY = 'feature_enhanced_validation_feedback';
 
 /**
  * Checks if the todo list UI feature is enabled via feature flag
@@ -40,6 +48,34 @@ function isFeatureEnabled() {
     return isEnabled;
   } catch (error) {
     console.error('[App] Error checking feature flag, defaulting to enabled', { 
+      error: error.message 
+    });
+    return true;
+  }
+}
+
+/**
+ * Checks if the enhanced validation feedback feature is enabled via feature flag
+ * @returns {boolean} True if feature is enabled, false otherwise
+ */
+function isEnhancedValidationEnabled() {
+  try {
+    const flagValue = localStorage.getItem(ENHANCED_VALIDATION_FLAG_KEY);
+    
+    if (flagValue === null) {
+      console.info('[App] Enhanced validation feature flag not set, defaulting to enabled');
+      return true;
+    }
+    
+    const isEnabled = flagValue !== 'off';
+    console.info('[App] Enhanced validation feature flag check', { 
+      flagValue, 
+      isEnabled 
+    });
+    
+    return isEnabled;
+  } catch (error) {
+    console.error('[App] Error checking enhanced validation feature flag, defaulting to enabled', { 
       error: error.message 
     });
     return true;
@@ -90,6 +126,42 @@ function showUserFeedback(message, type = 'info') {
 }
 
 /**
+ * Handles storage errors and displays appropriate error messages
+ * @param {Error} error - The error object from storage operation
+ */
+function handleStorageError(error) {
+  console.error('[App] handleStorageError:', { 
+    error: error.message,
+    name: error.name 
+  });
+  
+  try {
+    if (error.name === 'QuotaExceededError') {
+      showToast(
+        'Storage quota exceeded. Please delete some tasks to free up space.',
+        NotificationType.ERROR
+      );
+    } else if (error.message && error.message.includes('localStorage')) {
+      showToast(
+        'Storage is unavailable. Please check your browser settings.',
+        NotificationType.ERROR
+      );
+    } else {
+      showToast(
+        `Storage error: ${error.message}. Please try again.`,
+        NotificationType.ERROR
+      );
+    }
+  } catch (toastError) {
+    console.error('[App] handleStorageError: Error showing toast', { 
+      error: toastError.message 
+    });
+    // Fallback to user feedback
+    showUserFeedback(`Storage error: ${error.message}`, 'error');
+  }
+}
+
+/**
  * Handles adding a new todo item
  * Validates input, creates todo, saves to storage, and updates UI
  * 
@@ -125,9 +197,14 @@ function handleAddTodo(event) {
     
     const trimmedValue = inputValue.trim();
     
-    if (trimmedValue.length === 0) {
-      console.warn('[App] handleAddTodo: Empty input value');
-      showUserFeedback('Please enter a todo item', 'info');
+    // Validate input using validation module
+    const validationResult = validateTodoText(trimmedValue);
+    
+    if (!validationResult.isValid) {
+      console.warn('[App] handleAddTodo: Validation failed', { 
+        error: validationResult.error 
+      });
+      showToast(validationResult.error, NotificationType.ERROR);
       input.focus();
       return;
     }
@@ -135,6 +212,9 @@ function handleAddTodo(event) {
     console.debug('[App] handleAddTodo: Creating todo', { 
       textLength: trimmedValue.length 
     });
+    
+    // Show loading state
+    setLoadingState(true);
     
     // Create new todo item
     let newTodo;
@@ -148,7 +228,7 @@ function handleAddTodo(event) {
         error: error.message,
         stack: error.stack
       });
-      showUserFeedback(`Failed to create todo: ${error.message}`, 'error');
+      showToast(`Failed to create todo: ${error.message}`, NotificationType.ERROR);
       throw error;
     }
     
@@ -163,7 +243,7 @@ function handleAddTodo(event) {
       console.error('[App] handleAddTodo: Error retrieving todos', { 
         error: error.message 
       });
-      showUserFeedback('Failed to retrieve existing todos', 'error');
+      handleStorageError(error);
       throw error;
     }
     
@@ -177,7 +257,7 @@ function handleAddTodo(event) {
       
       if (!saveSuccess) {
         console.error('[App] handleAddTodo: Save operation returned false');
-        showUserFeedback('Failed to save todo. Storage may be full.', 'error');
+        showToast('Failed to save todo. Storage may be full.', NotificationType.ERROR);
         return;
       }
       
@@ -189,7 +269,7 @@ function handleAddTodo(event) {
         error: error.message,
         stack: error.stack
       });
-      showUserFeedback(`Failed to save todo: ${error.message}`, 'error');
+      handleStorageError(error);
       throw error;
     }
     
@@ -201,14 +281,14 @@ function handleAddTodo(event) {
       console.error('[App] handleAddTodo: Error rendering todos', { 
         error: error.message 
       });
-      showUserFeedback('Failed to update display', 'error');
+      showToast('Failed to update display', NotificationType.ERROR);
       throw error;
     }
     
     // Clear input and show success feedback
     try {
       clearInput();
-      showUserFeedback('Todo added successfully', 'success');
+      showToast('Task added successfully', NotificationType.SUCCESS);
       console.info('[App] handleAddTodo: Todo added successfully', { 
         todoId: newTodo.id 
       });
@@ -225,6 +305,15 @@ function handleAddTodo(event) {
       stack: error.stack
     });
     // Error feedback already shown in specific catch blocks
+  } finally {
+    // Clear loading state
+    try {
+      setLoadingState(false);
+    } catch (error) {
+      console.error('[App] handleAddTodo: Error clearing loading state', { 
+        error: error.message 
+      });
+    }
   }
 }
 
@@ -241,11 +330,14 @@ function handleDeleteTodo(id) {
     console.error('[App] handleDeleteTodo:', errorMsg, { 
       type: typeof id 
     });
-    showUserFeedback('Invalid todo ID', 'error');
+    showToast('Invalid todo ID', NotificationType.ERROR);
     throw new TypeError(errorMsg);
   }
   
   console.info('[App] handleDeleteTodo: Deleting todo', { todoId: id });
+  
+  // Show loading state
+  setLoadingState(true);
   
   try {
     // Get current todos from storage
@@ -259,7 +351,7 @@ function handleDeleteTodo(id) {
       console.error('[App] handleDeleteTodo: Error retrieving todos', { 
         error: error.message 
       });
-      showUserFeedback('Failed to retrieve todos', 'error');
+      handleStorageError(error);
       throw error;
     }
     
@@ -267,7 +359,7 @@ function handleDeleteTodo(id) {
     const todoExists = currentTodos.some(todo => todo.id === id);
     if (!todoExists) {
       console.warn('[App] handleDeleteTodo: Todo not found', { todoId: id });
-      showUserFeedback('Todo not found', 'info');
+      showToast('Todo not found', NotificationType.INFO);
       return;
     }
     
@@ -284,7 +376,7 @@ function handleDeleteTodo(id) {
         todoId: id,
         error: error.message 
       });
-      showUserFeedback(`Failed to delete todo: ${error.message}`, 'error');
+      showToast(`Failed to delete todo: ${error.message}`, NotificationType.ERROR);
       throw error;
     }
     
@@ -295,7 +387,7 @@ function handleDeleteTodo(id) {
       
       if (!saveSuccess) {
         console.error('[App] handleDeleteTodo: Save operation returned false');
-        showUserFeedback('Failed to save changes', 'error');
+        showToast('Failed to save changes', NotificationType.ERROR);
         return;
       }
       
@@ -306,14 +398,14 @@ function handleDeleteTodo(id) {
       console.error('[App] handleDeleteTodo: Error saving todos', { 
         error: error.message 
       });
-      showUserFeedback(`Failed to save changes: ${error.message}`, 'error');
+      handleStorageError(error);
       throw error;
     }
     
     // Re-render the UI
     try {
       renderTodos(updatedTodos, handleDeleteTodo);
-      showUserFeedback('Todo deleted successfully', 'success');
+      showToast('Task deleted successfully', NotificationType.SUCCESS);
       console.info('[App] handleDeleteTodo: Todo deleted successfully', { 
         todoId: id 
       });
@@ -321,7 +413,7 @@ function handleDeleteTodo(id) {
       console.error('[App] handleDeleteTodo: Error rendering todos', { 
         error: error.message 
       });
-      showUserFeedback('Failed to update display', 'error');
+      showToast('Failed to update display', NotificationType.ERROR);
       throw error;
     }
     
@@ -332,6 +424,15 @@ function handleDeleteTodo(id) {
       stack: error.stack
     });
     // Error feedback already shown in specific catch blocks
+  } finally {
+    // Clear loading state
+    try {
+      setLoadingState(false);
+    } catch (error) {
+      console.error('[App] handleDeleteTodo: Error clearing loading state', { 
+        error: error.message 
+      });
+    }
   }
 }
 
@@ -364,6 +465,12 @@ function init() {
       }
       return;
     }
+    
+    // Check enhanced validation feature flag
+    const enhancedValidationEnabled = isEnhancedValidationEnabled();
+    console.info('[App] init: Enhanced validation enabled', { 
+      enhancedValidationEnabled 
+    });
     
     // Get form element
     const form = document.getElementById('todo-form');
@@ -412,6 +519,22 @@ function init() {
       throw error;
     }
     
+    // Initialize real-time validation if enhanced validation is enabled
+    if (enhancedValidationEnabled) {
+      try {
+        const input = document.getElementById('todo-input');
+        if (input) {
+          validateInputRealtime(input);
+          console.debug('[App] init: Real-time validation initialized');
+        }
+      } catch (error) {
+        console.error('[App] init: Error initializing real-time validation', { 
+          error: error.message 
+        });
+        // Non-critical error, don't throw
+      }
+    }
+    
     // Focus input field for better UX
     try {
       const input = document.getElementById('todo-input');
@@ -436,6 +559,46 @@ function init() {
     throw error;
   }
 }
+
+// Global error handler for uncaught errors
+window.addEventListener('error', (event) => {
+  console.error('[App] Uncaught error:', { 
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    error: event.error
+  });
+  
+  try {
+    showToast(
+      'An unexpected error occurred. Please refresh the page.',
+      NotificationType.ERROR
+    );
+  } catch (toastError) {
+    console.error('[App] Error showing error toast:', toastError);
+  }
+});
+
+// Global handler for unhandled promise rejections
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[App] Unhandled promise rejection:', { 
+    reason: event.reason,
+    promise: event.promise
+  });
+  
+  try {
+    showToast(
+      'An unexpected error occurred. Please try again.',
+      NotificationType.ERROR
+    );
+  } catch (toastError) {
+    console.error('[App] Error showing error toast:', toastError);
+  }
+  
+  // Prevent default browser handling
+  event.preventDefault();
+});
 
 // Initialize application when DOM is ready
 if (document.readyState === 'loading') {
