@@ -1,504 +1,511 @@
-/**
- * Test Setup and Utilities
- * Provides common test utilities, mocks, and setup for Jest tests
- */
+// Test setup and utilities
+const { JSDOM } = require('jsdom');
+
+// Create a mock DOM environment
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+  url: 'http://localhost',
+  pretendToBeVisual: true,
+});
+
+global.window = dom.window;
+global.document = dom.window.document;
+global.navigator = dom.window.navigator;
 
 // Mock localStorage
-const localStorageMock = (() => {
-  let store = {};
+global.localStorage = {
+  store: {},
+  getItem(key) {
+    return this.store[key] || null;
+  },
+  setItem(key, value) {
+    this.store[key] = value.toString();
+  },
+  removeItem(key) {
+    delete this.store[key];
+  },
+  clear() {
+    this.store = {};
+  },
+};
+
+// Mock sessionStorage
+global.sessionStorage = {
+  store: {},
+  getItem(key) {
+    return this.store[key] || null;
+  },
+  setItem(key, value) {
+    this.store[key] = value.toString();
+  },
+  removeItem(key) {
+    delete this.store[key];
+  },
+  clear() {
+    this.store = {};
+  },
+};
+
+// Setup before each test
+beforeEach(() => {
+  // Clear localStorage
+  localStorage.clear();
+  sessionStorage.clear();
+
+  // Clear document body
+  document.body.innerHTML = '';
+
+  // Reset any mocks
+  jest.clearAllMocks();
+});
+
+// Cleanup after each test
+afterEach(() => {
+  // Clear any timers
+  jest.clearAllTimers();
+
+  // Clear document body
+  document.body.innerHTML = '';
+});
+
+// Helper function to create a mock todo element
+function createMockTodoElement(id, text, completed = false) {
+  const li = document.createElement('li');
+  li.className = 'todo-item';
+  li.dataset.id = id;
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.className = 'todo-checkbox';
+  checkbox.checked = completed;
+
+  const span = document.createElement('span');
+  span.className = 'todo-text';
+  span.textContent = text;
+  if (completed) {
+    span.classList.add('completed');
+  }
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'delete-btn';
+  deleteBtn.textContent = 'Delete';
+
+  li.appendChild(checkbox);
+  li.appendChild(span);
+  li.appendChild(deleteBtn);
+
+  return li;
+}
+
+// Helper function to create a mock app structure
+function createMockAppStructure() {
+  const container = document.createElement('div');
+  container.className = 'container';
+
+  const header = document.createElement('header');
+  const h1 = document.createElement('h1');
+  h1.textContent = 'To-Do List';
+  header.appendChild(h1);
+
+  const inputSection = document.createElement('div');
+  inputSection.className = 'input-section';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.id = 'todo-input';
+  input.placeholder = 'Add a new task...';
+
+  const addBtn = document.createElement('button');
+  addBtn.id = 'add-btn';
+  addBtn.textContent = 'Add';
+
+  inputSection.appendChild(input);
+  inputSection.appendChild(addBtn);
+
+  const todoList = document.createElement('ul');
+  todoList.id = 'todo-list';
+
+  container.appendChild(header);
+  container.appendChild(inputSection);
+  container.appendChild(todoList);
+
+  document.body.appendChild(container);
 
   return {
-    getItem: (key) => store[key] || null,
-    setItem: (key, value) => {
-      store[key] = value.toString();
-    },
-    removeItem: (key) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-    get length() {
-      return Object.keys(store).length;
-    },
-    key: (index) => {
-      const keys = Object.keys(store);
-      return keys[index] || null;
-    },
-  };
-})();
-
-global.localStorage = localStorageMock;
-
-// Mock DOM APIs
-if (typeof document === 'undefined') {
-  global.document = {
-    createElement: (tagName) => ({
-      tagName: tagName.toUpperCase(),
-      children: [],
-      classList: {
-        add: jest.fn(),
-        remove: jest.fn(),
-        contains: jest.fn(),
-        toggle: jest.fn(),
-      },
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn(),
-      appendChild: jest.fn(),
-      removeChild: jest.fn(),
-      setAttribute: jest.fn(),
-      getAttribute: jest.fn(),
-      remove: jest.fn(),
-      innerHTML: '',
-      textContent: '',
-      value: '',
-      style: {},
-    }),
-    getElementById: jest.fn(),
-    querySelector: jest.fn(),
-    querySelectorAll: jest.fn(() => []),
-    body: {
-      appendChild: jest.fn(),
-      removeChild: jest.fn(),
-      children: [],
-    },
+    container,
+    input,
+    addBtn,
+    todoList,
   };
 }
 
-// Mock window APIs
-if (typeof window === 'undefined') {
-  global.window = {
-    localStorage: localStorageMock,
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    location: {
-      href: 'http://localhost',
-      reload: jest.fn(),
-    },
-  };
-}
+// Helper function to wait for async operations
+function waitFor(callback, timeout = 1000) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
 
-// Test data fixtures
-const testFixtures = {
-  validTodo: {
-    id: 1,
-    text: 'Test todo',
-    completed: false,
-    createdAt: Date.now(),
-  },
-  completedTodo: {
-    id: 2,
-    text: 'Completed todo',
-    completed: true,
-    createdAt: Date.now() - 86400000, // 1 day ago
-  },
-  todoList: [
-    {
-      id: 1,
-      text: 'First todo',
-      completed: false,
-      createdAt: Date.now(),
-    },
-    {
-      id: 2,
-      text: 'Second todo',
-      completed: true,
-      createdAt: Date.now() - 3600000, // 1 hour ago
-    },
-    {
-      id: 3,
-      text: 'Third todo',
-      completed: false,
-      createdAt: Date.now() - 7200000, // 2 hours ago
-    },
-  ],
-  invalidInputs: [
-    '',
-    '   ',
-    null,
-    undefined,
-    'a'.repeat(501), // Too long
-  ],
-  validInputs: [
-    'Buy groceries',
-    'Call mom',
-    'Finish project',
-    'a'.repeat(500), // Max length
-  ],
-};
-
-// Helper functions for tests
-const testHelpers = {
-  /**
-   * Create a mock DOM element with common properties
-   */
-  createMockElement: (tagName = 'div', properties = {}) => {
-    const element = {
-      tagName: tagName.toUpperCase(),
-      children: [],
-      classList: {
-        add: jest.fn(),
-        remove: jest.fn(),
-        contains: jest.fn(() => false),
-        toggle: jest.fn(),
-      },
-      addEventListener: jest.fn(),
-      removeEventListener: jest.fn(),
-      appendChild: jest.fn(function (child) {
-        this.children.push(child);
-        child.parentNode = this;
-        return child;
-      }),
-      removeChild: jest.fn(function (child) {
-        const index = this.children.indexOf(child);
-        if (index > -1) {
-          this.children.splice(index, 1);
-          child.parentNode = null;
+    const check = () => {
+      try {
+        const result = callback();
+        if (result) {
+          resolve(result);
+        } else if (Date.now() - startTime > timeout) {
+          reject(new Error('Timeout waiting for condition'));
+        } else {
+          setTimeout(check, 50);
         }
-        return child;
-      }),
-      setAttribute: jest.fn(),
-      getAttribute: jest.fn(),
-      remove: jest.fn(),
-      innerHTML: '',
-      textContent: '',
-      value: '',
-      style: {},
-      parentNode: null,
-      ...properties,
+      } catch (error) {
+        if (Date.now() - startTime > timeout) {
+          reject(error);
+        } else {
+          setTimeout(check, 50);
+        }
+      }
     };
-    return element;
-  },
 
-  /**
-   * Create a mock event object
-   */
-  createMockEvent: (type = 'click', properties = {}) => ({
-    type,
-    preventDefault: jest.fn(),
-    stopPropagation: jest.fn(),
-    target: testHelpers.createMockElement(),
-    currentTarget: testHelpers.createMockElement(),
-    ...properties,
-  }),
+    check();
+  });
+}
 
-  /**
-   * Wait for async operations
-   */
-  waitFor: (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms)),
+// Helper function to simulate user input
+function simulateInput(element, value) {
+  element.value = value;
+  const event = new window.Event('input', { bubbles: true });
+  element.dispatchEvent(event);
+}
 
-  /**
-   * Flush all pending promises
-   */
-  flushPromises: () => new Promise((resolve) => setImmediate(resolve)),
+// Helper function to simulate button click
+function simulateClick(element) {
+  const event = new window.MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+  });
+  element.dispatchEvent(event);
+}
 
-  /**
-   * Reset all mocks
-   */
-  resetAllMocks: () => {
-    jest.clearAllMocks();
-    localStorage.clear();
-  },
+// Helper function to simulate key press
+function simulateKeyPress(element, key, keyCode) {
+  const event = new window.KeyboardEvent('keypress', {
+    key,
+    keyCode,
+    bubbles: true,
+    cancelable: true,
+  });
+  element.dispatchEvent(event);
+}
 
-  /**
-   * Setup localStorage with test data
-   */
-  setupLocalStorage: (data) => {
-    localStorage.clear();
-    Object.entries(data).forEach(([key, value]) => {
-      localStorage.setItem(key, JSON.stringify(value));
-    });
-  },
+// Helper function to get todos from localStorage
+function getTodosFromStorage() {
+  const data = localStorage.getItem('todos');
+  return data ? JSON.parse(data) : [];
+}
 
-  /**
-   * Get all items from localStorage
-   */
-  getLocalStorageData: () => {
-    const data = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      data[key] = JSON.parse(localStorage.getItem(key));
-    }
-    return data;
-  },
+// Helper function to set todos in localStorage
+function setTodosInStorage(todos) {
+  localStorage.setItem('todos', JSON.stringify(todos));
+}
 
-  /**
-   * Create a mock todo list element
-   */
-  createMockTodoList: () => {
-    const list = testHelpers.createMockElement('ul', {
-      id: 'todo-list',
-      className: 'todo-list',
-    });
-    return list;
-  },
+// Helper function to create mock todos
+function createMockTodos(count = 3) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i + 1,
+    text: `Todo ${i + 1}`,
+    completed: i % 2 === 0,
+    createdAt: new Date().toISOString(),
+  }));
+}
 
-  /**
-   * Create a mock todo item element
-   */
-  createMockTodoItem: (todo) => {
-    const item = testHelpers.createMockElement('li', {
-      className: 'todo-item',
-      dataset: { id: todo.id.toString() },
-    });
-
-    const checkbox = testHelpers.createMockElement('input', {
-      type: 'checkbox',
-      checked: todo.completed,
-      className: 'todo-checkbox',
-    });
-
-    const text = testHelpers.createMockElement('span', {
-      textContent: todo.text,
-      className: 'todo-text',
-    });
-
-    const deleteBtn = testHelpers.createMockElement('button', {
-      textContent: 'Delete',
-      className: 'delete-btn',
-    });
-
-    item.appendChild(checkbox);
-    item.appendChild(text);
-    item.appendChild(deleteBtn);
-
-    return { item, checkbox, text, deleteBtn };
-  },
-
-  /**
-   * Remove element from parent
-   */
-  removeElement: (element) => {
-    if (!element.parentNode) {
-      return;
-    }
-    element.parentNode.removeChild(element);
-  },
-};
-
-// Console spy helpers
-const consoleSpy = {
-  error: null,
-  warn: null,
-  log: null,
-
-  setup: () => {
-    consoleSpy.error = jest.spyOn(console, 'error').mockImplementation(() => {});
-    consoleSpy.warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    consoleSpy.log = jest.spyOn(console, 'log').mockImplementation(() => {});
-  },
-
-  restore: () => {
-    if (consoleSpy.error) consoleSpy.error.mockRestore();
-    if (consoleSpy.warn) consoleSpy.warn.mockRestore();
-    if (consoleSpy.log) consoleSpy.log.mockRestore();
-  },
-};
-
-// Setup and teardown
-beforeEach(() => {
-  localStorage.clear();
-  jest.clearAllMocks();
-});
-
-afterEach(() => {
-  localStorage.clear();
-  jest.clearAllMocks();
-});
-
-// Export test utilities
-module.exports = {
-  testFixtures,
-  testHelpers,
-  consoleSpy,
-  localStorageMock,
-};
-
-// Notification system mock
-class MockNotification {
-  constructor(message, type = 'info', duration = 3000) {
-    this.message = message;
-    this.type = type;
-    this.duration = duration;
-    this.element = testHelpers.createMockElement('div', {
-      className: `notification notification-${type}`,
-      textContent: message,
-    });
-    this.timeoutId = null;
-  }
-
-  show() {
-    document.body.appendChild(this.element);
-    if (this.duration > 0) {
-      this.timeoutId = setTimeout(() => this.hide(), this.duration);
-    }
-    return this;
-  }
-
-  hide() {
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = null;
-    }
-    testHelpers.removeElement(this.element);
-    return this;
+// Helper function to clear all todos
+function clearAllTodos() {
+  localStorage.removeItem('todos');
+  const todoList = document.getElementById('todo-list');
+  if (todoList) {
+    todoList.innerHTML = '';
   }
 }
 
-// Mock notification helpers
-const notificationMock = {
-  success: jest.fn((message, duration) => {
-    const notification = new MockNotification(message, 'success', duration);
-    notification.show();
-    return notification;
-  }),
-
-  error: jest.fn((message, duration) => {
-    const notification = new MockNotification(message, 'error', duration);
-    notification.show();
-    return notification;
-  }),
-
-  warning: jest.fn((message, duration) => {
-    const notification = new MockNotification(message, 'warning', duration);
-    notification.show();
-    return notification;
-  }),
-
-  info: jest.fn((message, duration) => {
-    const notification = new MockNotification(message, 'info', duration);
-    notification.show();
-    return notification;
-  }),
-
-  clear: jest.fn(() => {
-    const notifications = document.querySelectorAll('.notification');
-    notifications.forEach((notification) => {
-      testHelpers.removeElement(notification);
-    });
-  }),
-
-  reset: () => {
-    notificationMock.success.mockClear();
-    notificationMock.error.mockClear();
-    notificationMock.warning.mockClear();
-    notificationMock.info.mockClear();
-    notificationMock.clear.mockClear();
-  },
+// Mock notification system
+const mockNotifications = {
+  success: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warning: jest.fn(),
+  clear: jest.fn(),
 };
 
-module.exports.notificationMock = notificationMock;
-module.exports.MockNotification = MockNotification;
+// Mock notification container
+function createMockNotificationContainer() {
+  const container = document.createElement('div');
+  container.id = 'notification-container';
+  container.className = 'notification-container';
+  document.body.appendChild(container);
+  return container;
+}
 
-// Loading state mock
-const loadingMock = {
-  show: jest.fn(() => {
-    const loader = testHelpers.createMockElement('div', {
-      className: 'loading-spinner',
-      id: 'loading-spinner',
-    });
-    document.body.appendChild(loader);
-    return loader;
-  }),
+// Helper to create a notification element
+function createNotificationElement(type, message) {
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  notification.textContent = message;
+  return notification;
+}
 
-  hide: jest.fn(() => {
-    const loader = document.getElementById('loading-spinner');
-    if (loader) {
-      testHelpers.removeElement(loader);
+// Helper to show notification
+function showNotification(type, message, duration = 3000) {
+  const container =
+    document.getElementById('notification-container') ||
+    createMockNotificationContainer();
+  const notification = createNotificationElement(type, message);
+  container.appendChild(notification);
+
+  setTimeout(() => {
+    notification.remove();
+  }, duration);
+
+  return notification;
+}
+
+// Mock validation functions
+const mockValidation = {
+  validateTodoInput: jest.fn((text) => {
+    if (!text || text.trim().length === 0) {
+      return {
+        isValid: false,
+        errors: ['Todo text is required'],
+        sanitizedValue: '',
+      };
     }
-  }),
-
-  reset: () => {
-    loadingMock.show.mockClear();
-    loadingMock.hide.mockClear();
-  },
-};
-
-module.exports.loadingMock = loadingMock;
-
-// Error boundary mock
-const errorBoundaryMock = {
-  handleError: jest.fn((error, errorInfo) => {
-    console.error('Error caught by boundary:', error, errorInfo);
+    if (text.length > 200) {
+      return {
+        isValid: false,
+        errors: ['Todo text is too long (max 200 characters)'],
+        sanitizedValue: text.substring(0, 200),
+      };
+    }
     return {
-      error,
-      errorInfo,
-      recovered: false,
+      isValid: true,
+      errors: [],
+      sanitizedValue: text.trim(),
     };
   }),
-
-  reset: () => {
-    errorBoundaryMock.handleError.mockClear();
-  },
-};
-
-module.exports.errorBoundaryMock = errorBoundaryMock;
-
-// Toast notification helpers
-const toastHelpers = {
-  findToast: (message) => {
-    const toasts = document.querySelectorAll('.toast, .notification');
-    return Array.from(toasts).find((toast) => toast.textContent.includes(message));
-  },
-
-  findToastByType: (type) => {
-    const toasts = document.querySelectorAll('.toast, .notification');
-    return Array.from(toasts).find((toast) => toast.classList.contains(`toast-${type}`) || toast.classList.contains(`notification-${type}`));
-  },
-
-  getAllToasts: () => {
-    return Array.from(document.querySelectorAll('.toast, .notification'));
-  },
-
-  clearAllToasts: () => {
-    const toasts = document.querySelectorAll('.toast, .notification');
-    toasts.forEach((toast) => {
-      testHelpers.removeElement(toast);
-    });
-  },
-
-  waitForToast: async (message, timeout = 1000) => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeout) {
-      const toast = toastHelpers.findToast(message);
-      if (toast) return toast;
-      await testHelpers.waitFor(50);
+  validateTodoId: jest.fn((id) => {
+    if (typeof id !== 'number' || id <= 0 || !Number.isInteger(id)) {
+      return {
+        isValid: false,
+        errors: ['Invalid todo ID'],
+      };
     }
-    return null;
-  },
-
-  waitForToastByType: async (type, timeout = 1000) => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeout) {
-      const toast = toastHelpers.findToastByType(type);
-      if (toast) return toast;
-      await testHelpers.waitFor(50);
-    }
-    return null;
-  },
-};
-
-module.exports.toastHelpers = toastHelpers;
-
-// Validation helpers
-const validationHelpers = {
-  createValidationResult: (isValid, error = null) => ({
-    isValid,
-    error,
+    return {
+      isValid: true,
+      errors: [],
+    };
   }),
-
-  expectValidationSuccess: (result) => {
-    expect(result).toHaveProperty('isValid', true);
-    expect(result).toHaveProperty('error', null);
-  },
-
-  expectValidationFailure: (result, expectedError) => {
-    expect(result).toHaveProperty('isValid', false);
-    expect(result).toHaveProperty('error');
-    if (expectedError) {
-      expect(result.error).toBe(expectedError);
-    }
-  },
+  sanitizeInput: jest.fn((text) => {
+    if (!text) { return ''; }
+    return text.replace(/<[^>]*>/g, '').trim();
+  }),
 };
 
-module.exports.validationHelpers = validationHelpers;
+// Helper to reset all mocks
+function resetAllMocks() {
+  Object.values(mockNotifications).forEach((fn) => {
+    if (typeof fn === 'function' && fn.mockClear) {
+      fn.mockClear();
+    }
+  });
+  Object.values(mockValidation).forEach((fn) => {
+    if (typeof fn === 'function' && fn.mockClear) {
+      fn.mockClear();
+    }
+  });
+}
+
+// Export helpers
+module.exports = {
+  createMockTodoElement,
+  createMockAppStructure,
+  waitFor,
+  simulateInput,
+  simulateClick,
+  simulateKeyPress,
+  getTodosFromStorage,
+  setTodosInStorage,
+  createMockTodos,
+  clearAllTodos,
+  mockNotifications,
+  createMockNotificationContainer,
+  createNotificationElement,
+  showNotification,
+  mockValidation,
+  resetAllMocks,
+};
+
+// Global test utilities
+global.testUtils = {
+  createMockTodoElement,
+  createMockAppStructure,
+  waitFor,
+  simulateInput,
+  simulateClick,
+  simulateKeyPress,
+  getTodosFromStorage,
+  setTodosInStorage,
+  createMockTodos,
+  clearAllTodos,
+  mockNotifications,
+  mockValidation,
+  resetAllMocks,
+};
+
+// Mock console methods to reduce noise in tests
+global.console = {
+  ...console,
+  error: jest.fn(),
+  warn: jest.fn(),
+  log: jest.fn(),
+};
+
+// Setup global error handler
+global.addEventListener = jest.fn((event, handler) => {
+  if (event === 'error') {
+    global.errorHandler = handler;
+  }
+});
+
+// Helper to trigger global error
+function triggerGlobalError(error) {
+  if (global.errorHandler) {
+    global.errorHandler({ error });
+  }
+}
+
+// Helper to create error event
+function createErrorEvent(message, filename, lineno, colno, error) {
+  return {
+    message,
+    filename,
+    lineno,
+    colno,
+    error,
+    preventDefault: jest.fn(),
+  };
+}
+
+// Mock fetch for API calls
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({}),
+    text: () => Promise.resolve(''),
+    status: 200,
+    statusText: 'OK',
+  })
+);
+
+// Helper to mock fetch response
+function mockFetchResponse(data, ok = true, status = 200) {
+  global.fetch.mockImplementationOnce(() =>
+    Promise.resolve({
+      ok,
+      json: () => Promise.resolve(data),
+      text: () => Promise.resolve(JSON.stringify(data)),
+      status,
+      statusText: ok ? 'OK' : 'Error',
+    })
+  );
+}
+
+// Helper to mock fetch error
+function mockFetchError(error) {
+  global.fetch.mockImplementationOnce(() => Promise.reject(error));
+}
+
+// Animation frame mock
+global.requestAnimationFrame = jest.fn((callback) => {
+  setTimeout(callback, 16);
+  return 1;
+});
+
+global.cancelAnimationFrame = jest.fn();
+
+// Helper to wait for animations
+function waitForAnimation() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resolve);
+    });
+  });
+}
+
+// Helper to create loading state
+function createLoadingState() {
+  const overlay = document.createElement('div');
+  overlay.className = 'loading-overlay';
+  overlay.innerHTML = '<div class="spinner"></div>';
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+// Helper to remove loading state
+function removeLoadingState() {
+  const overlay = document.querySelector('.loading-overlay');
+  if (!element) { return; }
+  element.remove();
+}
+
+// Helper to check if element is visible
+function isElementVisible(element) {
+  if (!element) { return false; }
+  const style = window.getComputedStyle(element);
+  return (
+    style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    style.opacity !== '0'
+  );
+}
+
+// Helper to wait for element to be visible
+function waitForElementToBeVisible(selector, timeout = 1000) {
+  return waitFor(() => {
+    const element = document.querySelector(selector);
+    return element && isElementVisible(element) ? element : null;
+  }, timeout);
+}
+
+// Helper to wait for element to be hidden
+function waitForElementToBeHidden(selector, timeout = 1000) {
+  return waitFor(() => {
+    const element = document.querySelector(selector);
+    return !element || !isElementVisible(element);
+  }, timeout);
+}
+
+// Export additional helpers
+module.exports = {
+  ...module.exports,
+  triggerGlobalError,
+  createErrorEvent,
+  mockFetchResponse,
+  mockFetchError,
+  waitForAnimation,
+  createLoadingState,
+  removeLoadingState,
+  isElementVisible,
+  waitForElementToBeVisible,
+  waitForElementToBeHidden,
+};
+
+// Add to global test utilities
+global.testUtils = {
+  ...global.testUtils,
+  triggerGlobalError,
+  createErrorEvent,
+  mockFetchResponse,
+  mockFetchError,
+  waitForAnimation,
+  createLoadingState,
+  removeLoadingState,
+  isElementVisible,
+  waitForElementToBeVisible,
+  waitForElementToBeHidden,
+};
