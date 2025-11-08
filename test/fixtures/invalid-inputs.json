@@ -1,0 +1,62 @@
+[
+  {
+    "input": "",
+    "expectedValid": false,
+    "expectedError": "Task cannot be empty",
+    "description": "Empty string should be invalid"
+  },
+  {
+    "input": "   ",
+    "expectedValid": false,
+    "expectedError": "Task cannot contain only whitespace",
+    "description": "Whitespace-only string should be invalid"
+  },
+  {
+    "input": "\t\n",
+    "expectedValid": false,
+    "expectedError": "Task cannot contain only whitespace",
+    "description": "Tabs and newlines only should be invalid"
+  },
+  {
+    "input": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium totam rem aperiam eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.",
+    "expectedValid": false,
+    "expectedError": "Task cannot exceed 500 characters",
+    "description": "String exceeding 500 characters should be invalid"
+  },
+  {
+    "input": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.",
+    "expectedValid": true,
+    "expectedError": null,
+    "description": "String with exactly 500 characters should be valid"
+  },
+  {
+    "input": "Buy milk",
+    "expectedValid": true,
+    "expectedError": null,
+    "description": "Valid short input should be accepted"
+  },
+  {
+    "input": "Call @John & schedule meeting!",
+    "expectedValid": true,
+    "expectedError": null,
+    "description": "Valid input with special characters should be accepted"
+  },
+  {
+    "input": "日本語のタスク",
+    "expectedValid": true,
+    "expectedError": null,
+    "description": "Valid unicode characters should be accepted"
+  },
+  {
+    "input": "  Buy groceries  ",
+    "expectedValid": true,
+    "expectedError": null,
+    "description": "Valid input with leading/trailing whitespace should be accepted after trimming"
+  },
+  {
+    "input": "Task with\nmultiple\nlines",
+    "expectedValid": true,
+    "expectedError": null,
+    "description": "Valid input with newlines should be accepted"
+  }
+]
