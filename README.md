@@ -1,6 +1,6 @@
 # To-Do List Application
 
-A lightweight, responsive to-do list application built with vanilla JavaScript, HTML5, and CSS3. Features local storage persistence, timestamp tracking, and a clean user interface that works seamlessly across all modern browsers and devices.
+A lightweight, responsive to-do list application built with vanilla JavaScript, HTML5, and CSS3. Features local storage persistence, timestamp tracking, comprehensive input validation, error handling, and a clean user interface that works seamlessly across all modern browsers and devices.
 
 ## Features
 
@@ -13,11 +13,31 @@ A lightweight, responsive to-do list application built with vanilla JavaScript, 
 - 🔒 **XSS Protection** - Input sanitization for secure data handling
 - ♿ **Accessible** - Semantic HTML structure for screen reader compatibility
 
-## Prerequisites
+## Enhanced Features
 
-- **Node.js** >= 18.0.0
-- **npm** >= 9.0.0
+### Input Validation
+- **Real-time Validation** - Instant feedback as you type with clear error messages
+- **Character Limit** - Maximum 500 characters per task to ensure optimal performance
+- **Empty Input Prevention** - Prevents submission of empty or whitespace-only tasks
+- **Visual Feedback** - Error states clearly indicated with color and icons
 
-## Installation
+### Error Handling
+- **Graceful Error Recovery** - Application maintains state consistency even when errors occur
+- **User-Friendly Messages** - Clear, actionable error messages guide users to resolution
+- **Storage Quota Handling** - Intelligent handling of browser storage limitations with helpful guidance
+- **No Crashes** - Robust error boundaries prevent application failures
 
-1. Clone the repository:
+### Visual Feedback
+- **Success/Error Toast Notifications** - Non-intrusive notifications for all user actions
+- **Loading States** - Visual indicators during save and delete operations
+- **Smooth Animations** - CSS transitions provide polished, professional feel
+- **Auto-Dismiss** - Notifications automatically clear after appropriate duration
+
+## Feature Flags
+
+### Enhanced Validation Feedback
+The application includes a feature flag system for controlling validation and notification behavior:
+
+- **Flag Name**: `feature_enhanced_validation_feedback`
+- **Default State**: `on` (enabled)
+- **How to Disable**: Open browser console and run:
