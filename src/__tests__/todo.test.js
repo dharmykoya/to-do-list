@@ -1,690 +1,717 @@
-/**
- * Todo Business Logic Unit Tests
- * 
- * Comprehensive test suite for todo item creation, deletion, and input sanitization.
- * Tests cover all edge cases, error conditions, and security requirements.
- * Uses deterministic mocking for crypto.randomUUID and Date for reproducible tests.
- * 
- * @module src/__tests__/todo.test
- */
+import { jest } from '@jest/globals';
+import {
+  createTodo,
+  addTodo,
+  removeTodo,
+  toggleTodo,
+  updateTodo,
+  getTodoById,
+  clearCompleted,
+  getCompletedCount,
+  getPendingCount,
+  getAllTodos,
+} from '../todo.js';
 
-import { createTodo, deleteTodo, sanitizeInput } from '../todo.js';
+describe('Todo Module', () => {
+  describe('createTodo', () => {
+    test('should create a new todo with required properties', () => {
+      const text = 'Test todo';
+      const todo = createTodo(text);
 
-/**
- * Test Suite: sanitizeInput()
- * 
- * Validates input sanitization functionality including:
- * - Whitespace trimming
- * - HTML entity escaping
- * - Special character handling
- * - XSS prevention
- */
-describe('sanitizeInput', () => {
-  describe('whitespace handling', () => {
-    test('trims leading whitespace', () => {
-      const result = sanitizeInput('   hello');
-      expect(result).toBe('hello');
-    });
-
-    test('trims trailing whitespace', () => {
-      const result = sanitizeInput('hello   ');
-      expect(result).toBe('hello');
-    });
-
-    test('trims both leading and trailing whitespace', () => {
-      const result = sanitizeInput('   hello world   ');
-      expect(result).toBe('hello world');
-    });
-
-    test('preserves internal whitespace', () => {
-      const result = sanitizeInput('hello   world');
-      expect(result).toBe('hello   world');
-    });
-
-    test('handles tabs and newlines', () => {
-      const result = sanitizeInput('\t\nhello\n\t');
-      expect(result).toBe('hello');
-    });
-
-    test('returns empty string for whitespace-only input', () => {
-      const result = sanitizeInput('   \t\n   ');
-      expect(result).toBe('');
-    });
-  });
-
-  describe('HTML entity escaping', () => {
-    test('escapes ampersand', () => {
-      const result = sanitizeInput('Tom & Jerry');
-      expect(result).toBe('Tom &amp; Jerry');
-    });
-
-    test('escapes less than symbol', () => {
-      const result = sanitizeInput('5 < 10');
-      expect(result).toBe('5 &lt; 10');
-    });
-
-    test('escapes greater than symbol', () => {
-      const result = sanitizeInput('10 > 5');
-      expect(result).toBe('10 &gt; 5');
-    });
-
-    test('escapes double quotes', () => {
-      const result = sanitizeInput('Say "hello"');
-      expect(result).toBe('Say &quot;hello&quot;');
-    });
-
-    test('escapes single quotes', () => {
-      const result = sanitizeInput("It's working");
-      expect(result).toBe('It&#39;s working');
-    });
-
-    test('escapes forward slash', () => {
-      const result = sanitizeInput('path/to/file');
-      expect(result).toBe('path&#x2F;to&#x2F;file');
-    });
-
-    test('escapes multiple special characters', () => {
-      const result = sanitizeInput('<div class="test">Hello & "goodbye"</div>');
-      expect(result).toBe('&lt;div class=&quot;test&quot;&gt;Hello &amp; &quot;goodbye&quot;&lt;&#x2F;div&gt;');
-    });
-  });
-
-  describe('XSS prevention', () => {
-    test('prevents script tag injection', () => {
-      const result = sanitizeInput('<script>alert("xss")</script>');
-      expect(result).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;');
-      expect(result).not.toContain('<script>');
-    });
-
-    test('prevents img tag with onerror injection', () => {
-      const result = sanitizeInput('<img src=x onerror="alert(1)">');
-      expect(result).toBe('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
-      expect(result).not.toContain('<img');
-    });
-
-    test('prevents iframe injection', () => {
-      const result = sanitizeInput('<iframe src="evil.com"></iframe>');
-      expect(result).toBe('&lt;iframe src=&quot;evil.com&quot;&gt;&lt;&#x2F;iframe&gt;');
-      expect(result).not.toContain('<iframe');
-    });
-
-    test('prevents javascript: protocol injection', () => {
-      const result = sanitizeInput('<a href="javascript:alert(1)">click</a>');
-      expect(result).toBe('&lt;a href=&quot;javascript:alert(1)&quot;&gt;click&lt;&#x2F;a&gt;');
-      expect(result).not.toContain('javascript:');
-    });
-
-    test('prevents event handler injection', () => {
-      const result = sanitizeInput('<div onclick="alert(1)">click me</div>');
-      expect(result).toBe('&lt;div onclick=&quot;alert(1)&quot;&gt;click me&lt;&#x2F;div&gt;');
-      expect(result).not.toContain('onclick=');
-    });
-
-    test('handles complex XSS attempt with multiple vectors', () => {
-      const result = sanitizeInput('"><script>alert(String.fromCharCode(88,83,83))</script>');
-      expect(result).toBe('&quot;&gt;&lt;script&gt;alert(String.fromCharCode(88,83,83))&lt;&#x2F;script&gt;');
-      expect(result).not.toContain('<script>');
-    });
-  });
-
-  describe('special character handling', () => {
-    test('handles unicode characters', () => {
-      const result = sanitizeInput('Hello 世界 🌍');
-      expect(result).toBe('Hello 世界 🌍');
-    });
-
-    test('handles emoji', () => {
-      const result = sanitizeInput('Task 📝 Complete ✅');
-      expect(result).toBe('Task 📝 Complete ✅');
-    });
-
-    test('handles mathematical symbols', () => {
-      const result = sanitizeInput('Calculate: 2 + 2 = 4');
-      expect(result).toBe('Calculate: 2 + 2 = 4');
-    });
-
-    test('handles currency symbols', () => {
-      const result = sanitizeInput('Price: $100 €50 ¥1000');
-      expect(result).toBe('Price: $100 €50 ¥1000');
-    });
-
-    test('handles mixed content', () => {
-      const result = sanitizeInput('  Buy <groceries> & pay $50  ');
-      expect(result).toBe('Buy &lt;groceries&gt; &amp; pay $50');
-    });
-  });
-
-  describe('error handling', () => {
-    test('throws TypeError for non-string input - number', () => {
-      expect(() => sanitizeInput(123)).toThrow(TypeError);
-      expect(() => sanitizeInput(123)).toThrow('Input must be a string');
-    });
-
-    test('throws TypeError for non-string input - null', () => {
-      expect(() => sanitizeInput(null)).toThrow(TypeError);
-      expect(() => sanitizeInput(null)).toThrow('Input must be a string');
-    });
-
-    test('throws TypeError for non-string input - undefined', () => {
-      expect(() => sanitizeInput(undefined)).toThrow(TypeError);
-      expect(() => sanitizeInput(undefined)).toThrow('Input must be a string');
-    });
-
-    test('throws TypeError for non-string input - object', () => {
-      expect(() => sanitizeInput({})).toThrow(TypeError);
-      expect(() => sanitizeInput({})).toThrow('Input must be a string');
-    });
-
-    test('throws TypeError for non-string input - array', () => {
-      expect(() => sanitizeInput([])).toThrow(TypeError);
-      expect(() => sanitizeInput([])).toThrow('Input must be a string');
-    });
-
-    test('throws TypeError for non-string input - boolean', () => {
-      expect(() => sanitizeInput(true)).toThrow(TypeError);
-      expect(() => sanitizeInput(true)).toThrow('Input must be a string');
-    });
-  });
-
-  describe('edge cases', () => {
-    test('handles empty string', () => {
-      const result = sanitizeInput('');
-      expect(result).toBe('');
-    });
-
-    test('handles very long strings', () => {
-      const longString = 'a'.repeat(10000);
-      const result = sanitizeInput(longString);
-      expect(result).toBe(longString);
-      expect(result.length).toBe(10000);
-    });
-
-    test('handles string with only special characters', () => {
-      const result = sanitizeInput('<>&"\'/');
-      expect(result).toBe('&lt;&gt;&amp;&quot;&#39;&#x2F;');
-    });
-
-    test('handles repeated escaping attempts', () => {
-      const result = sanitizeInput('&lt;script&gt;');
-      expect(result).toBe('&amp;lt;script&amp;gt;');
-    });
-  });
-});
-
-/**
- * Test Suite: createTodo()
- * 
- * Validates todo creation functionality including:
- * - Valid todo structure generation
- * - UUID generation
- * - Timestamp creation
- * - Input sanitization integration
- * - Error handling
- */
-describe('createTodo', () => {
-  // Mock crypto.randomUUID for deterministic tests
-  const mockUUID = '550e8400-e29b-41d4-a716-446655440000';
-  const originalRandomUUID = crypto.randomUUID;
-  
-  // Mock Date for deterministic timestamps
-  const mockTimestamp = '2025-01-08T12:00:00.000Z';
-  const originalDate = global.Date;
-
-  beforeEach(() => {
-    // Mock crypto.randomUUID
-    crypto.randomUUID = jest.fn(() => mockUUID);
-    
-    // Mock Date
-    const mockDate = new Date(mockTimestamp);
-    global.Date = class extends originalDate {
-      constructor(...args) {
-        if (args.length === 0) {
-          return mockDate;
-        }
-        return new originalDate(...args);
-      }
-      
-      static now() {
-        return mockDate.getTime();
-      }
-      
-      toISOString() {
-        return mockTimestamp;
-      }
-    };
-  });
-
-  afterEach(() => {
-    // Restore original implementations
-    crypto.randomUUID = originalRandomUUID;
-    global.Date = originalDate;
-  });
-
-  describe('valid todo creation', () => {
-    test('creates todo with valid structure', () => {
-      const todo = createTodo('Buy groceries');
-      
       expect(todo).toHaveProperty('id');
-      expect(todo).toHaveProperty('text');
-      expect(todo).toHaveProperty('timestamp');
-      expect(Object.keys(todo)).toHaveLength(3);
+      expect(todo).toHaveProperty('text', text);
+      expect(todo).toHaveProperty('completed', false);
+      expect(todo).toHaveProperty('createdAt');
+      expect(typeof todo.id).toBe('number');
+      expect(typeof todo.createdAt).toBe('string');
     });
 
-    test('generates unique UUID for id', () => {
-      const todo = createTodo('Test task');
-      
-      expect(todo.id).toBe(mockUUID);
-      expect(crypto.randomUUID).toHaveBeenCalledTimes(1);
-      expect(typeof todo.id).toBe('string');
-      expect(todo.id.length).toBe(36);
-    });
+    test('should create todos with unique IDs', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
 
-    test('adds current timestamp in ISO 8601 format', () => {
-      const todo = createTodo('Test task');
-      
-      expect(todo.timestamp).toBe(mockTimestamp);
-      expect(typeof todo.timestamp).toBe('string');
-      expect(todo.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    test('sanitizes input text', () => {
-      const todo = createTodo('  <script>alert("xss")</script>  ');
-      
-      expect(todo.text).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;');
-      expect(todo.text).not.toContain('<script>');
-    });
-
-    test('creates todo with simple text', () => {
-      const todo = createTodo('Buy milk');
-      
-      expect(todo.text).toBe('Buy milk');
-      expect(todo.id).toBe(mockUUID);
-      expect(todo.timestamp).toBe(mockTimestamp);
-    });
-
-    test('creates todo with special characters', () => {
-      const todo = createTodo('Buy milk & bread');
-      
-      expect(todo.text).toBe('Buy milk &amp; bread');
-    });
-
-    test('creates todo with unicode characters', () => {
-      const todo = createTodo('学习 JavaScript 📚');
-      
-      expect(todo.text).toBe('学习 JavaScript 📚');
-    });
-
-    test('trims whitespace from input', () => {
-      const todo = createTodo('   Task with spaces   ');
-      
-      expect(todo.text).toBe('Task with spaces');
-    });
-  });
-
-  describe('error handling', () => {
-    test('throws Error for empty string', () => {
-      expect(() => createTodo('')).toThrow(Error);
-      expect(() => createTodo('')).toThrow('Todo text cannot be empty or only whitespace');
-    });
-
-    test('throws Error for whitespace-only string', () => {
-      expect(() => createTodo('   ')).toThrow(Error);
-      expect(() => createTodo('   ')).toThrow('Todo text cannot be empty or only whitespace');
-    });
-
-    test('throws Error for tabs and newlines only', () => {
-      expect(() => createTodo('\t\n\r')).toThrow(Error);
-      expect(() => createTodo('\t\n\r')).toThrow('Todo text cannot be empty or only whitespace');
-    });
-
-    test('throws TypeError for non-string input - number', () => {
-      expect(() => createTodo(123)).toThrow(TypeError);
-      expect(() => createTodo(123)).toThrow('Todo text must be a string');
-    });
-
-    test('throws TypeError for non-string input - null', () => {
-      expect(() => createTodo(null)).toThrow(TypeError);
-      expect(() => createTodo(null)).toThrow('Todo text must be a string');
-    });
-
-    test('throws TypeError for non-string input - undefined', () => {
-      expect(() => createTodo(undefined)).toThrow(TypeError);
-      expect(() => createTodo(undefined)).toThrow('Todo text must be a string');
-    });
-
-    test('throws TypeError for non-string input - object', () => {
-      expect(() => createTodo({})).toThrow(TypeError);
-      expect(() => createTodo({})).toThrow('Todo text must be a string');
-    });
-
-    test('throws TypeError for non-string input - array', () => {
-      expect(() => createTodo([])).toThrow(TypeError);
-      expect(() => createTodo([])).toThrow('Todo text must be a string');
-    });
-
-    test('throws TypeError for non-string input - boolean', () => {
-      expect(() => createTodo(true)).toThrow(TypeError);
-      expect(() => createTodo(true)).toThrow('Todo text must be a string');
-    });
-
-    test('throws Error when crypto.randomUUID is not available', () => {
-      const originalCrypto = global.crypto;
-      global.crypto = undefined;
-      
-      expect(() => createTodo('Test')).toThrow(Error);
-      expect(() => createTodo('Test')).toThrow('crypto.randomUUID is not available in this environment');
-      
-      global.crypto = originalCrypto;
-    });
-
-    test('throws Error when crypto.randomUUID is not a function', () => {
-      const originalRandomUUID = crypto.randomUUID;
-      crypto.randomUUID = undefined;
-      
-      expect(() => createTodo('Test')).toThrow(Error);
-      expect(() => createTodo('Test')).toThrow('crypto.randomUUID is not available in this environment');
-      
-      crypto.randomUUID = originalRandomUUID;
-    });
-  });
-
-  describe('edge cases', () => {
-    test('handles very long text', () => {
-      const longText = 'a'.repeat(10000);
-      const todo = createTodo(longText);
-      
-      expect(todo.text).toBe(longText);
-      expect(todo.text.length).toBe(10000);
-    });
-
-    test('handles text with only special characters after sanitization', () => {
-      const todo = createTodo('<>&');
-      
-      expect(todo.text).toBe('&lt;&gt;&amp;');
-    });
-
-    test('handles single character input', () => {
-      const todo = createTodo('a');
-      
-      expect(todo.text).toBe('a');
-    });
-
-    test('creates multiple todos with different UUIDs', () => {
-      crypto.randomUUID = originalRandomUUID; // Use real UUID for this test
-      
-      const todo1 = createTodo('Task 1');
-      const todo2 = createTodo('Task 2');
-      
       expect(todo1.id).not.toBe(todo2.id);
     });
-  });
-});
 
-/**
- * Test Suite: deleteTodo()
- * 
- * Validates todo deletion functionality including:
- * - Successful deletion by ID
- * - Immutability (no mutation of original array)
- * - Handling of non-existent IDs
- * - Error handling for invalid inputs
- */
-describe('deleteTodo', () => {
-  const mockTodos = [
-    {
-      id: '1',
-      text: 'Task 1',
-      timestamp: '2025-01-08T12:00:00.000Z'
-    },
-    {
-      id: '2',
-      text: 'Task 2',
-      timestamp: '2025-01-08T12:01:00.000Z'
-    },
-    {
-      id: '3',
-      text: 'Task 3',
-      timestamp: '2025-01-08T12:02:00.000Z'
-    }
-  ];
+    test('should create todo with valid ISO date string', () => {
+      const todo = createTodo('Test');
+      const date = new Date(todo.createdAt);
 
-  describe('successful deletion', () => {
-    test('removes todo by id', () => {
-      const result = deleteTodo(mockTodos, '2');
-      
-      expect(result).toHaveLength(2);
-      expect(result.find(todo => todo.id === '2')).toBeUndefined();
-      expect(result.find(todo => todo.id === '1')).toBeDefined();
-      expect(result.find(todo => todo.id === '3')).toBeDefined();
+      expect(date).toBeInstanceOf(Date);
+      expect(date.toString()).not.toBe('Invalid Date');
     });
 
-    test('removes first todo', () => {
-      const result = deleteTodo(mockTodos, '1');
-      
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('2');
-      expect(result[1].id).toBe('3');
+    test('should handle empty string text', () => {
+      const todo = createTodo('');
+
+      expect(todo.text).toBe('');
+      expect(todo).toHaveProperty('id');
     });
 
-    test('removes last todo', () => {
-      const result = deleteTodo(mockTodos, '3');
-      
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('1');
-      expect(result[1].id).toBe('2');
+    test('should handle text with special characters', () => {
+      const text = 'Test @#$% todo & more';
+      const todo = createTodo(text);
+
+      expect(todo.text).toBe(text);
     });
 
-    test('removes middle todo', () => {
-      const result = deleteTodo(mockTodos, '2');
-      
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('1');
-      expect(result[1].id).toBe('3');
+    test('should handle very long text', () => {
+      const longText = 'a'.repeat(1000);
+      const todo = createTodo(longText);
+
+      expect(todo.text).toBe(longText);
+      expect(todo.text.length).toBe(1000);
     });
 
-    test('returns empty array when deleting only todo', () => {
-      const singleTodo = [mockTodos[0]];
-      const result = deleteTodo(singleTodo, '1');
-      
-      expect(result).toHaveLength(0);
-      expect(result).toEqual([]);
+    test('should create todo with completed set to false by default', () => {
+      const todo = createTodo('Test');
+
+      expect(todo.completed).toBe(false);
+    });
+
+    test('should create todo with timestamp close to current time', () => {
+      const before = new Date().toISOString();
+      const todo = createTodo('Test');
+      const after = new Date().toISOString();
+
+      expect(todo.createdAt >= before).toBe(true);
+      expect(todo.createdAt <= after).toBe(true);
     });
   });
 
-  describe('immutability', () => {
-    test('returns new array without mutating original', () => {
-      const originalLength = mockTodos.length;
-      const originalTodos = [...mockTodos];
-      
-      const result = deleteTodo(mockTodos, '2');
-      
-      expect(mockTodos.length).toBe(originalLength);
-      expect(mockTodos).toEqual(originalTodos);
-      expect(result).not.toBe(mockTodos);
-    });
+  describe('addTodo', () => {
+    test('should add a new todo to empty list', () => {
+      const todos = [];
+      const newTodo = createTodo('New todo');
+      const result = addTodo(todos, newTodo);
 
-    test('preserves original todo objects', () => {
-      const result = deleteTodo(mockTodos, '2');
-      
-      const originalTodo1 = mockTodos.find(t => t.id === '1');
-      const resultTodo1 = result.find(t => t.id === '1');
-      
-      expect(resultTodo1).toBe(originalTodo1);
-    });
-
-    test('does not modify original array when deleting non-existent id', () => {
-      const originalTodos = [...mockTodos];
-      
-      deleteTodo(mockTodos, 'non-existent');
-      
-      expect(mockTodos).toEqual(originalTodos);
-    });
-  });
-
-  describe('non-existent id handling', () => {
-    test('handles non-existent id gracefully', () => {
-      const result = deleteTodo(mockTodos, 'non-existent-id');
-      
-      expect(result).toHaveLength(3);
-      expect(result).toEqual(mockTodos);
-    });
-
-    test('returns array with same length for non-existent id', () => {
-      const result = deleteTodo(mockTodos, '999');
-      
-      expect(result.length).toBe(mockTodos.length);
-    });
-
-    test('handles empty string id', () => {
-      const result = deleteTodo(mockTodos, '');
-      
-      expect(result).toHaveLength(3);
-      expect(result).toEqual(mockTodos);
-    });
-
-    test('handles UUID-like non-existent id', () => {
-      const result = deleteTodo(mockTodos, '550e8400-e29b-41d4-a716-446655440000');
-      
-      expect(result).toHaveLength(3);
-    });
-  });
-
-  describe('error handling', () => {
-    test('throws TypeError for non-array todos - null', () => {
-      expect(() => deleteTodo(null, '1')).toThrow(TypeError);
-      expect(() => deleteTodo(null, '1')).toThrow('Todos must be an array');
-    });
-
-    test('throws TypeError for non-array todos - undefined', () => {
-      expect(() => deleteTodo(undefined, '1')).toThrow(TypeError);
-      expect(() => deleteTodo(undefined, '1')).toThrow('Todos must be an array');
-    });
-
-    test('throws TypeError for non-array todos - object', () => {
-      expect(() => deleteTodo({}, '1')).toThrow(TypeError);
-      expect(() => deleteTodo({}, '1')).toThrow('Todos must be an array');
-    });
-
-    test('throws TypeError for non-array todos - string', () => {
-      expect(() => deleteTodo('not an array', '1')).toThrow(TypeError);
-      expect(() => deleteTodo('not an array', '1')).toThrow('Todos must be an array');
-    });
-
-    test('throws TypeError for non-array todos - number', () => {
-      expect(() => deleteTodo(123, '1')).toThrow(TypeError);
-      expect(() => deleteTodo(123, '1')).toThrow('Todos must be an array');
-    });
-
-    test('throws TypeError for non-string id - number', () => {
-      expect(() => deleteTodo(mockTodos, 123)).toThrow(TypeError);
-      expect(() => deleteTodo(mockTodos, 123)).toThrow('ID must be a string');
-    });
-
-    test('throws TypeError for non-string id - null', () => {
-      expect(() => deleteTodo(mockTodos, null)).toThrow(TypeError);
-      expect(() => deleteTodo(mockTodos, null)).toThrow('ID must be a string');
-    });
-
-    test('throws TypeError for non-string id - undefined', () => {
-      expect(() => deleteTodo(mockTodos, undefined)).toThrow(TypeError);
-      expect(() => deleteTodo(mockTodos, undefined)).toThrow('ID must be a string');
-    });
-
-    test('throws TypeError for non-string id - object', () => {
-      expect(() => deleteTodo(mockTodos, {})).toThrow(TypeError);
-      expect(() => deleteTodo(mockTodos, {})).toThrow('ID must be a string');
-    });
-
-    test('throws TypeError for non-string id - array', () => {
-      expect(() => deleteTodo(mockTodos, [])).toThrow(TypeError);
-      expect(() => deleteTodo(mockTodos, [])).toThrow('ID must be a string');
-    });
-
-    test('throws TypeError for non-string id - boolean', () => {
-      expect(() => deleteTodo(mockTodos, true)).toThrow(TypeError);
-      expect(() => deleteTodo(mockTodos, true)).toThrow('ID must be a string');
-    });
-  });
-
-  describe('edge cases', () => {
-    test('handles empty array', () => {
-      const result = deleteTodo([], '1');
-      
-      expect(result).toHaveLength(0);
-      expect(result).toEqual([]);
-    });
-
-    test('handles array with single item - delete existing', () => {
-      const singleTodo = [mockTodos[0]];
-      const result = deleteTodo(singleTodo, '1');
-      
-      expect(result).toHaveLength(0);
-    });
-
-    test('handles array with single item - delete non-existing', () => {
-      const singleTodo = [mockTodos[0]];
-      const result = deleteTodo(singleTodo, '999');
-      
       expect(result).toHaveLength(1);
-      expect(result[0]).toEqual(mockTodos[0]);
+      expect(result[0]).toEqual(newTodo);
     });
 
-    test('handles large array', () => {
-      const largeTodos = Array.from({ length: 1000 }, (_, i) => ({
-        id: String(i),
-        text: `Task ${i}`,
-        timestamp: '2025-01-08T12:00:00.000Z'
+    test('should add a new todo to existing list', () => {
+      const existingTodo = createTodo('Existing todo');
+      const todos = [existingTodo];
+      const newTodo = createTodo('New todo');
+      const result = addTodo(todos, newTodo);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(existingTodo);
+      expect(result[1]).toEqual(newTodo);
+    });
+
+    test('should not mutate original todos array', () => {
+      const todos = [createTodo('Todo 1')];
+      const originalLength = todos.length;
+      const newTodo = createTodo('Todo 2');
+
+      addTodo(todos, newTodo);
+
+      expect(todos).toHaveLength(originalLength);
+    });
+
+    test('should return new array reference', () => {
+      const todos = [];
+      const newTodo = createTodo('New todo');
+      const result = addTodo(todos, newTodo);
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should handle adding multiple todos sequentially', () => {
+      let todos = [];
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+
+      todos = addTodo(todos, todo1);
+      todos = addTodo(todos, todo2);
+      todos = addTodo(todos, todo3);
+
+      expect(todos).toHaveLength(3);
+      expect(todos[0]).toEqual(todo1);
+      expect(todos[1]).toEqual(todo2);
+      expect(todos[2]).toEqual(todo3);
+    });
+
+    test('should preserve todo properties when adding', () => {
+      const todos = [];
+      const newTodo = {
+        id: 123,
+        text: 'Test',
+        completed: false,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      };
+      const result = addTodo(todos, newTodo);
+
+      expect(result[0]).toEqual(newTodo);
+      expect(result[0].id).toBe(123);
+      expect(result[0].text).toBe('Test');
+      expect(result[0].completed).toBe(false);
+      expect(result[0].createdAt).toBe('2024-01-01T00:00:00.000Z');
+    });
+  });
+
+  describe('removeTodo', () => {
+    test('should remove todo by id', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = removeTodo(todos, todo1.id);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(todo2);
+    });
+
+    test('should return empty array when removing last todo', () => {
+      const todo = createTodo('Only todo');
+      const todos = [todo];
+      const result = removeTodo(todos, todo.id);
+
+      expect(result).toHaveLength(0);
+      expect(result).toEqual([]);
+    });
+
+    test('should not mutate original todos array', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const originalLength = todos.length;
+
+      removeTodo(todos, todo1.id);
+
+      expect(todos).toHaveLength(originalLength);
+    });
+
+    test('should return new array reference', () => {
+      const todo = createTodo('Todo');
+      const todos = [todo];
+      const result = removeTodo(todos, todo.id);
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should handle removing non-existent id', () => {
+      const todo = createTodo('Todo');
+      const todos = [todo];
+      const result = removeTodo(todos, 999999);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(todo);
+    });
+
+    test('should handle empty todos array', () => {
+      const todos = [];
+      const result = removeTodo(todos, 1);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should remove correct todo from multiple todos', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+      const todos = [todo1, todo2, todo3];
+      const result = removeTodo(todos, todo2.id);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(todo1);
+      expect(result[1]).toEqual(todo3);
+    });
+
+    test('should handle removing multiple todos sequentially', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+      let todos = [todo1, todo2, todo3];
+
+      todos = removeTodo(todos, todo1.id);
+      expect(todos).toHaveLength(2);
+
+      todos = removeTodo(todos, todo3.id);
+      expect(todos).toHaveLength(1);
+      expect(todos[0]).toEqual(todo2);
+    });
+  });
+
+  describe('toggleTodo', () => {
+    test('should toggle todo completion status from false to true', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result[0].completed).toBe(true);
+    });
+
+    test('should toggle todo completion status from true to false', () => {
+      const todo = { ...createTodo('Test todo'), completed: true };
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result[0].completed).toBe(false);
+    });
+
+    test('should not mutate original todos array', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const originalCompleted = todo.completed;
+
+      toggleTodo(todos, todo.id);
+
+      expect(todo.completed).toBe(originalCompleted);
+    });
+
+    test('should return new array reference', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should only toggle specified todo', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = toggleTodo(todos, todo1.id);
+
+      expect(result[0].completed).toBe(true);
+      expect(result[1].completed).toBe(false);
+    });
+
+    test('should handle toggling non-existent id', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, 999999);
+
+      expect(result[0].completed).toBe(false);
+    });
+
+    test('should preserve other todo properties', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = toggleTodo(todos, todo.id);
+
+      expect(result[0].id).toBe(todo.id);
+      expect(result[0].text).toBe(todo.text);
+      expect(result[0].createdAt).toBe(todo.createdAt);
+    });
+
+    test('should handle multiple toggles', () => {
+      const todo = createTodo('Test todo');
+      let todos = [todo];
+
+      todos = toggleTodo(todos, todo.id);
+      expect(todos[0].completed).toBe(true);
+
+      todos = toggleTodo(todos, todo.id);
+      expect(todos[0].completed).toBe(false);
+
+      todos = toggleTodo(todos, todo.id);
+      expect(todos[0].completed).toBe(true);
+    });
+  });
+
+  describe('updateTodo', () => {
+    test('should update todo text', () => {
+      const todo = createTodo('Original text');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { text: 'Updated text' });
+
+      expect(result[0].text).toBe('Updated text');
+    });
+
+    test('should update todo completed status', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { completed: true });
+
+      expect(result[0].completed).toBe(true);
+    });
+
+    test('should update multiple properties at once', () => {
+      const todo = createTodo('Original text');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, {
+        text: 'Updated text',
+        completed: true,
+      });
+
+      expect(result[0].text).toBe('Updated text');
+      expect(result[0].completed).toBe(true);
+    });
+
+    test('should not mutate original todos array', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const originalText = todo.text;
+
+      updateTodo(todos, todo.id, { text: 'Updated' });
+
+      expect(todo.text).toBe(originalText);
+    });
+
+    test('should return new array reference', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { text: 'Updated' });
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should only update specified todo', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = updateTodo(todos, todo1.id, { text: 'Updated' });
+
+      expect(result[0].text).toBe('Updated');
+      expect(result[1].text).toBe('Todo 2');
+    });
+
+    test('should handle updating non-existent id', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, 999999, { text: 'Updated' });
+
+      expect(result[0].text).toBe('Test todo');
+    });
+
+    test('should preserve properties not being updated', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, { text: 'Updated' });
+
+      expect(result[0].id).toBe(todo.id);
+      expect(result[0].completed).toBe(todo.completed);
+      expect(result[0].createdAt).toBe(todo.createdAt);
+    });
+
+    test('should handle empty updates object', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = updateTodo(todos, todo.id, {});
+
+      expect(result[0]).toEqual(todo);
+    });
+  });
+
+  describe('getTodoById', () => {
+    test('should return todo with matching id', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = getTodoById(todos, todo1.id);
+
+      expect(result).toEqual(todo1);
+    });
+
+    test('should return undefined for non-existent id', () => {
+      const todo = createTodo('Test todo');
+      const todos = [todo];
+      const result = getTodoById(todos, 999999);
+
+      expect(result).toBeUndefined();
+    });
+
+    test('should handle empty todos array', () => {
+      const todos = [];
+      const result = getTodoById(todos, 1);
+
+      expect(result).toBeUndefined();
+    });
+
+    test('should return first matching todo if duplicates exist', () => {
+      const todo1 = { id: 1, text: 'First', completed: false, createdAt: '' };
+      const todo2 = { id: 1, text: 'Second', completed: false, createdAt: '' };
+      const todos = [todo1, todo2];
+      const result = getTodoById(todos, 1);
+
+      expect(result === 1).toBe(true);
+    });
+
+    test('should find todo in large list', () => {
+      const todos = Array.from({ length: 1000 }, (_, i) =>
+        createTodo(`Todo ${i}`)
+      );
+      const targetTodo = todos[500];
+      const result = getTodoById(todos, targetTodo.id);
+
+      expect(result).toEqual(targetTodo);
+    });
+  });
+
+  describe('clearCompleted', () => {
+    test('should remove all completed todos', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todo3 = { ...createTodo('Todo 3'), completed: true };
+      const todos = [todo1, todo2, todo3];
+      const result = clearCompleted(todos);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(todo2);
+    });
+
+    test('should return empty array when all todos are completed', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = { ...createTodo('Todo 2'), completed: true };
+      const todos = [todo1, todo2];
+      const result = clearCompleted(todos);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return all todos when none are completed', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = clearCompleted(todos);
+
+      expect(result).toHaveLength(2);
+      expect(result).toEqual(todos);
+    });
+
+    test('should not mutate original todos array', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const originalLength = todos.length;
+
+      clearCompleted(todos);
+
+      expect(todos).toHaveLength(originalLength);
+    });
+
+    test('should return new array reference', () => {
+      const todos = [createTodo('Todo')];
+      const result = clearCompleted(todos);
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should handle empty todos array', () => {
+      const todos = [];
+      const result = clearCompleted(todos);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getCompletedCount', () => {
+    test('should return count of completed todos', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todo3 = { ...createTodo('Todo 3'), completed: true };
+      const todos = [todo1, todo2, todo3];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(2);
+    });
+
+    test('should return 0 when no todos are completed', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(0);
+    });
+
+    test('should return total count when all todos are completed', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = { ...createTodo('Todo 2'), completed: true };
+      const todos = [todo1, todo2];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(2);
+    });
+
+    test('should return 0 for empty todos array', () => {
+      const todos = [];
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(0);
+    });
+
+    test('should handle large number of todos', () => {
+      const todos = Array.from({ length: 1000 }, (_, i) => ({
+        ...createTodo(`Todo ${i}`),
+        completed: i % 2 === 0,
       }));
-      
-      const result = deleteTodo(largeTodos, '500');
-      
-      expect(result).toHaveLength(999);
-      expect(result.find(t => t.id === '500')).toBeUndefined();
+      const count = getCompletedCount(todos);
+
+      expect(count).toBe(500);
+    });
+  });
+
+  describe('getPendingCount', () => {
+    test('should return count of pending todos', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = createTodo('Todo 2');
+      const todo3 = createTodo('Todo 3');
+      const todos = [todo1, todo2, todo3];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(2);
     });
 
-    test('handles todos with duplicate ids - removes all matches', () => {
-      const todosWithDuplicates = [
-        { id: '1', text: 'Task 1', timestamp: '2025-01-08T12:00:00.000Z' },
-        { id: '2', text: 'Task 2', timestamp: '2025-01-08T12:01:00.000Z' },
-        { id: '1', text: 'Task 1 duplicate', timestamp: '2025-01-08T12:02:00.000Z' }
-      ];
-      
-      const result = deleteTodo(todosWithDuplicates, '1');
-      
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('2');
+    test('should return total count when no todos are completed', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(2);
     });
 
-    test('preserves todo order after deletion', () => {
-      const result = deleteTodo(mockTodos, '2');
-      
-      expect(result[0].id).toBe('1');
-      expect(result[1].id).toBe('3');
-      expect(result[0].text).toBe('Task 1');
-      expect(result[1].text).toBe('Task 3');
+    test('should return 0 when all todos are completed', () => {
+      const todo1 = { ...createTodo('Todo 1'), completed: true };
+      const todo2 = { ...createTodo('Todo 2'), completed: true };
+      const todos = [todo1, todo2];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(0);
     });
 
-    test('handles todos with complex objects', () => {
-      const complexTodos = [
-        {
-          id: '1',
-          text: 'Task 1',
-          timestamp: '2025-01-08T12:00:00.000Z',
-          metadata: { priority: 'high', tags: ['work'] }
-        },
-        {
-          id: '2',
-          text: 'Task 2',
-          timestamp: '2025-01-08T12:01:00.000Z',
-          metadata: { priority: 'low', tags: ['personal'] }
-        }
-      ];
-      
-      const result = deleteTodo(complexTodos, '1');
-      
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('2');
-      expect(result[0].metadata).toEqual({ priority: 'low', tags: ['personal'] });
+    test('should return 0 for empty todos array', () => {
+      const todos = [];
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(0);
+    });
+
+    test('should handle large number of todos', () => {
+      const todos = Array.from({ length: 1000 }, (_, i) => ({
+        ...createTodo(`Todo ${i}`),
+        completed: i % 2 === 0,
+      }));
+      const count = getPendingCount(todos);
+
+      expect(count).toBe(500);
+    });
+  });
+
+  describe('getAllTodos', () => {
+    test('should return all todos', () => {
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+      const todos = [todo1, todo2];
+      const result = getAllTodos(todos);
+
+      expect(result).toEqual(todos);
+    });
+
+    test('should return empty array for empty input', () => {
+      const todos = [];
+      const result = getAllTodos(todos);
+
+      expect(result).toEqual([]);
+    });
+
+    test('should return new array reference', () => {
+      const todos = [createTodo('Todo')];
+      const result = getAllTodos(todos);
+
+      expect(result).not.toBe(todos);
+    });
+
+    test('should not mutate original array', () => {
+      const todo = createTodo('Test');
+      const todos = [todo];
+      const result = getAllTodos(todos);
+
+      result.push(createTodo('New'));
+
+      expect(todos).toHaveLength(1);
+    });
+  });
+
+  describe('Edge Cases and Error Handling', () => {
+    test('should handle null todo in getTodoById', () => {
+      const todo = createTodo('Test');
+      const todos = [todo, null];
+      const result = getTodoById(todos, todo.id);
+
+      expect(result).toEqual(todo);
+    });
+
+    test('should handle undefined in todos array', () => {
+      const todo = createTodo('Test');
+      const todos = [todo, undefined];
+      const result = getTodoById(todos, todo.id);
+
+      expect(result).toEqual(todo);
+    });
+
+    test('should handle very large todo lists', () => {
+      const todos = Array.from({ length: 10000 }, (_, i) =>
+        createTodo(`Todo ${i}`)
+      );
+
+      expect(todos).toHaveLength(10000);
+      expect(getCompletedCount(todos)).toBe(0);
+      expect(getPendingCount(todos)).toBe(10000);
+    });
+
+    test('should handle todos with same text but different ids', () => {
+      const todo1 = createTodo('Same text');
+      const todo2 = createTodo('Same text');
+      const todos = [todo1, todo2];
+
+      expect(todo1.id).not.toBe(todo2.id);
+      expect(getTodoById(todos, todo1.id)).toEqual(todo1);
+      expect(getTodoById(todos, todo2.id)).toEqual(todo2);
+    });
+
+    test('should handle rapid sequential operations', () => {
+      let todos = [];
+
+      // Add multiple todos
+      for (let i = 0; i < 100; i++) {
+        todos = addTodo(todos, createTodo(`Todo ${i}`));
+      }
+
+      expect(todos).toHaveLength(100);
+
+      // Toggle some todos
+      for (let i = 0; i < 50; i++) {
+        todos = toggleTodo(todos, todos[i].id);
+      }
+
+      expect(getCompletedCount(todos)).toBe(50);
+
+      // Remove some todos
+      for (let i = 0; i < 25; i++) {
+        todos = removeTodo(todos, todos[0].id);
+      }
+
+      expect(todos).toHaveLength(75);
+    });
+
+    test('should maintain data integrity through complex operations', () => {
+      let todos = [];
+      const todo1 = createTodo('Todo 1');
+      const todo2 = createTodo('Todo 2');
+
+      todos = addTodo(todos, todo1);
+      todos = addTodo(todos, todo2);
+      todos = toggleTodo(todos, todo1.id);
+      todos = updateTodo(todos, todo2.id, { text: 'Updated Todo 2' });
+
+      expect(todos).toHaveLength(2);
+      expect(todos[0].completed).toBe(true);
+      expect(todos[1].text).toBe('Updated Todo 2');
+      expect(todos[0].id).toBe(todo1.id);
+      expect(todos[1].id).toBe(todo2.id);
+    });
+
+    test('should handle null for non-existent id in getTodoById', () => {
+      const todo = createTodo('Test');
+      const todos = [todo];
+      const result = getTodoById(todos, 999999);
+
+      expect(result === null).toBe(true);
     });
   });
 });

@@ -8,6 +8,9 @@
  * @module ui
  */
 
+import { validateTodoText, createRealtimeValidator } from './validation.js';
+import { showToast, NotificationType } from './notifications.js';
+
 /**
  * Formats an ISO 8601 timestamp string into a human-readable format.
  * 
@@ -57,6 +60,7 @@ export function formatTimestamp(isoString) {
 /**
  * Clears the todo input field and sets focus to it.
  * Handles cases where the input element might not exist.
+ * Also clears any error states.
  * 
  * @throws {Error} If the input element is not found in the DOM
  * 
@@ -77,12 +81,242 @@ export function clearInput() {
   try {
     input.value = '';
     input.focus();
+    clearInputError();
     console.debug('[UI] clearInput: Input cleared and focused');
   } catch (error) {
     console.error('[UI] clearInput: Error clearing input', { 
       error: error.message 
     });
     throw new Error(`Failed to clear input: ${error.message}`);
+  }
+}
+
+/**
+ * Displays an error message for the input field with proper accessibility attributes.
+ * 
+ * @param {string} errorMessage - The error message to display
+ * @throws {TypeError} If errorMessage is not a string
+ * @throws {Error} If the input element is not found in the DOM
+ * 
+ * @example
+ * showInputError('Task cannot be empty');
+ */
+export function showInputError(errorMessage) {
+  if (typeof errorMessage !== 'string') {
+    console.error('[UI] showInputError: Invalid error message type', { 
+      type: typeof errorMessage 
+    });
+    throw new TypeError('Error message must be a string');
+  }
+
+  const input = document.getElementById('todo-input');
+  
+  if (!input) {
+    console.error('[UI] showInputError: Input element not found', { 
+      elementId: 'todo-input' 
+    });
+    throw new Error('Todo input element not found in DOM');
+  }
+
+  try {
+    // Add error class to input
+    input.classList.add('input--error');
+    input.setAttribute('aria-invalid', 'true');
+
+    // Remove existing error message if present
+    const existingError = document.querySelector('.input__error');
+    if (existingError) {
+      existingError.remove();
+    }
+
+    // Create error message element
+    const errorSpan = document.createElement('span');
+    errorSpan.className = 'input__error';
+    errorSpan.setAttribute('role', 'alert');
+    errorSpan.setAttribute('data-testid', 'input-error');
+    errorSpan.textContent = errorMessage;
+
+    // Insert error message after input
+    input.parentNode.insertBefore(errorSpan, input.nextSibling);
+
+    console.debug('[UI] showInputError: Error message displayed', { errorMessage });
+  } catch (error) {
+    console.error('[UI] showInputError: Error displaying error message', { 
+      error: error.message 
+    });
+    throw new Error(`Failed to show input error: ${error.message}`);
+  }
+}
+
+/**
+ * Clears the error state from the input field.
+ * 
+ * @example
+ * clearInputError();
+ */
+export function clearInputError() {
+  const input = document.getElementById('todo-input');
+  
+  if (!input) {
+    console.warn('[UI] clearInputError: Input element not found', { 
+      elementId: 'todo-input' 
+    });
+    return;
+  }
+
+  try {
+    // Remove error class from input
+    input.classList.remove('input--error');
+    input.setAttribute('aria-invalid', 'false');
+
+    // Remove error message if present
+    const errorSpan = document.querySelector('.input__error');
+    if (errorSpan) {
+      errorSpan.remove();
+    }
+
+    console.debug('[UI] clearInputError: Error state cleared');
+  } catch (error) {
+    console.error('[UI] clearInputError: Error clearing error state', { 
+      error: error.message 
+    });
+  }
+}
+
+/**
+ * Sets the loading state for the form, disabling/enabling the submit button.
+ * 
+ * @param {boolean} isLoading - Whether the form is in loading state
+ * @throws {TypeError} If isLoading is not a boolean
+ * @throws {Error} If the submit button is not found in the DOM
+ * 
+ * @example
+ * setLoadingState(true);  // Disable button and show loading
+ * setLoadingState(false); // Enable button and hide loading
+ */
+export function setLoadingState(isLoading) {
+  if (typeof isLoading !== 'boolean') {
+    console.error('[UI] setLoadingState: Invalid isLoading type', { 
+      type: typeof isLoading 
+    });
+    throw new TypeError('isLoading must be a boolean');
+  }
+
+  const submitButton = document.querySelector('button[type="submit"]');
+  
+  if (!submitButton) {
+    console.error('[UI] setLoadingState: Submit button not found');
+    throw new Error('Submit button not found in DOM');
+  }
+
+  try {
+    if (isLoading) {
+      submitButton.disabled = true;
+      submitButton.classList.add('button--loading');
+      console.debug('[UI] setLoadingState: Loading state enabled');
+    } else {
+      submitButton.disabled = false;
+      submitButton.classList.remove('button--loading');
+      console.debug('[UI] setLoadingState: Loading state disabled');
+    }
+  } catch (error) {
+    console.error('[UI] setLoadingState: Error setting loading state', { 
+      error: error.message 
+    });
+    throw new Error(`Failed to set loading state: ${error.message}`);
+  }
+}
+
+/**
+ * Attaches real-time validation to an input element.
+ * 
+ * @param {HTMLInputElement} inputElement - The input element to validate
+ * @throws {TypeError} If inputElement is not an HTMLInputElement
+ * 
+ * @example
+ * const input = document.getElementById('todo-input');
+ * validateInputRealtime(input);
+ */
+export function validateInputRealtime(inputElement) {
+  if (!(inputElement instanceof HTMLInputElement)) {
+    console.error('[UI] validateInputRealtime: Invalid input element', { 
+      type: typeof inputElement 
+    });
+    throw new TypeError('inputElement must be an HTMLInputElement');
+  }
+
+  try {
+    const validator = createRealtimeValidator((result) => {
+      if (result.isValid) {
+        clearInputError();
+        enableSubmitButton();
+      } else {
+        showInputError(result.error);
+        disableSubmitButton();
+      }
+    });
+
+    inputElement.addEventListener('input', (event) => {
+      const value = event.target.value;
+      validator(value);
+    });
+
+    console.debug('[UI] validateInputRealtime: Real-time validation attached');
+  } catch (error) {
+    console.error('[UI] validateInputRealtime: Error attaching validation', { 
+      error: error.message 
+    });
+    throw new Error(`Failed to attach real-time validation: ${error.message}`);
+  }
+}
+
+/**
+ * Disables the submit button.
+ * 
+ * @example
+ * disableSubmitButton();
+ */
+export function disableSubmitButton() {
+  const submitButton = document.querySelector('button[type="submit"]');
+  
+  if (!submitButton) {
+    console.warn('[UI] disableSubmitButton: Submit button not found');
+    return;
+  }
+
+  try {
+    submitButton.disabled = true;
+    submitButton.classList.add('button--disabled');
+    console.debug('[UI] disableSubmitButton: Submit button disabled');
+  } catch (error) {
+    console.error('[UI] disableSubmitButton: Error disabling button', { 
+      error: error.message 
+    });
+  }
+}
+
+/**
+ * Enables the submit button.
+ * 
+ * @example
+ * enableSubmitButton();
+ */
+export function enableSubmitButton() {
+  const submitButton = document.querySelector('button[type="submit"]');
+  
+  if (!submitButton) {
+    console.warn('[UI] enableSubmitButton: Submit button not found');
+    return;
+  }
+
+  try {
+    submitButton.disabled = false;
+    submitButton.classList.remove('button--disabled');
+    console.debug('[UI] enableSubmitButton: Submit button enabled');
+  } catch (error) {
+    console.error('[UI] enableSubmitButton: Error enabling button', { 
+      error: error.message 
+    });
   }
 }
 
@@ -139,6 +373,17 @@ export function renderTodos(todos, onDelete) {
   try {
     // Clear existing items and their event listeners
     listContainer.innerHTML = '';
+
+    // Handle empty state
+    if (todos.length === 0) {
+      const emptyMessage = document.createElement('div');
+      emptyMessage.className = 'empty-state';
+      emptyMessage.setAttribute('data-testid', 'empty-state');
+      emptyMessage.textContent = 'No tasks yet. Add one above to get started!';
+      listContainer.appendChild(emptyMessage);
+      console.info('[UI] renderTodos: Empty state displayed');
+      return;
+    }
 
     // Render each todo item
     todos.forEach((todo, index) => {
@@ -233,6 +478,8 @@ export function renderTodos(todos, onDelete) {
               error: error.message,
               stack: error.stack
             });
+            // Show error toast to user
+            showToast('Failed to delete task. Please try again.', NotificationType.ERROR);
             // Re-throw to allow caller to handle
             throw error;
           }
@@ -276,6 +523,8 @@ export function renderTodos(todos, onDelete) {
       error: error.message,
       stack: error.stack
     });
+    // Show error toast to user
+    showToast('Failed to display tasks. Please refresh the page.', NotificationType.ERROR);
     throw new Error(`Failed to render todos: ${error.message}`);
   }
 }
