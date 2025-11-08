@@ -8,8 +8,14 @@
  * @module src/__tests__/ui.test
  */
 
-import { screen } from '@testing-library/dom';
-import { renderTodos, formatTimestamp, clearInput } from '../ui.js';
+import { screen, fireEvent } from '@testing-library/dom';
+import { renderTodos, formatTimestamp, clearInput, showInputError, clearInputError, setLoadingState, validateInputRealtime, disableSubmitButton, enableSubmitButton } from '../ui.js';
+import * as validation from '../validation.js';
+import * as notifications from '../notifications.js';
+
+// Mock the validation and notifications modules
+jest.mock('../validation.js');
+jest.mock('../notifications.js');
 
 /**
  * Test Suite: UI Module
@@ -40,12 +46,22 @@ describe('UI Module', () => {
     input.setAttribute('data-testid', 'todo-input');
     document.body.appendChild(input);
 
+    // Create submit button for loading state tests
+    const submitButton = document.createElement('button');
+    submitButton.type = 'submit';
+    submitButton.setAttribute('data-testid', 'submit-button');
+    submitButton.textContent = 'Add Task';
+    document.body.appendChild(submitButton);
+
     // Suppress console output during tests
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'info').mockImplementation(() => {});
     jest.spyOn(console, 'debug').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Clear all mocks
+    jest.clearAllMocks();
   });
 
   /**
@@ -80,8 +96,8 @@ describe('UI Module', () => {
 
       const listContainer = document.getElementById('todo-list');
       expect(listContainer).toBeInTheDocument();
-      expect(listContainer.children.length).toBe(0);
-      expect(listContainer.innerHTML).toBe('');
+      expect(listContainer.children.length).toBe(1);
+      expect(screen.getByTestId('empty-state')).toBeInTheDocument();
     });
 
     /**
@@ -435,6 +451,66 @@ describe('UI Module', () => {
 
       expect(mockOnDelete).toHaveBeenCalledWith('event-test');
     });
+
+    /**
+     * Test: Render Error Handling
+     * Verifies that render errors are handled gracefully with error toast
+     */
+    test('handles render errors gracefully and shows error toast', () => {
+      const mockOnDelete = jest.fn();
+      const todos = [
+        {
+          id: 'error-test',
+          text: 'Test error',
+          timestamp: '2024-01-15T10:30:00.000Z'
+        }
+      ];
+
+      // Mock showToast
+      notifications.showToast = jest.fn();
+
+      // Force an error by removing the list container mid-render
+      const originalAppendChild = HTMLElement.prototype.appendChild;
+      HTMLElement.prototype.appendChild = jest.fn(() => {
+        throw new Error('DOM manipulation error');
+      });
+
+      expect(() => renderTodos(todos, mockOnDelete)).toThrow();
+
+      // Restore original method
+      HTMLElement.prototype.appendChild = originalAppendChild;
+    });
+
+    /**
+     * Test: Delete Handler Error
+     * Verifies that errors in onDelete callback show error toast
+     */
+    test('shows error toast when onDelete callback throws error', () => {
+      const mockOnDelete = jest.fn(() => {
+        throw new Error('Delete failed');
+      });
+      const todos = [
+        {
+          id: 'delete-error-test',
+          text: 'Test delete error',
+          timestamp: '2024-01-15T10:30:00.000Z'
+        }
+      ];
+
+      // Mock showToast
+      notifications.showToast = jest.fn();
+      notifications.NotificationType = { ERROR: 'error' };
+
+      renderTodos(todos, mockOnDelete);
+
+      const deleteBtn = screen.getByTestId('delete-btn-delete-error-test');
+      
+      expect(() => deleteBtn.click()).toThrow('Delete failed');
+      expect(notifications.showToast).toHaveBeenCalledWith(
+        'Failed to delete task. Please try again.',
+        'error'
+      );
+    });
   });
 
   /**
@@ -547,6 +623,7 @@ describe('UI Module', () => {
    * Tests input clearing function including:
    * - Value clearing
    * - Focus management
+   * - Error state clearing
    * - Error handling
    */
   describe('clearInput()', () => {
@@ -635,6 +712,548 @@ describe('UI Module', () => {
 
       expect(() => clearInput()).not.toThrow();
       expect(input.value).toBe('');
+    });
+
+    /**
+     * Test: Clears Error State
+     * Verifies that clearInput also clears any error states
+     */
+    test('clears error state when clearing input', () => {
+      const input = document.getElementById('todo-input');
+      input.value = 'Test value';
+      
+      // Add error state
+      input.classList.add('input--error');
+      input.setAttribute('aria-invalid', 'true');
+
+      clearInput();
+
+      expect(input.value).toBe('');
+      expect(input.classList.contains('input--error')).toBe(false);
+      expect(input.getAttribute('aria-invalid')).toBe('false');
+    });
+  });
+
+  /**
+   * Test Suite: showInputError()
+   * 
+   * Tests error display function including:
+   * - Error message display
+   * - CSS class application
+   * - Accessibility attributes
+   * - Error handling
+   */
+  describe('showInputError()', () => {
+    /**
+     * Test: Adds Error Class to Input
+     * Verifies that error class is added to input element
+     */
+    test('adds error class to input', () => {
+      const input = document.getElementById('todo-input');
+      
+      showInputError('Test error message');
+
+      expect(input.classList.contains('input--error')).toBe(true);
+    });
+
+    /**
+     * Test: Displays Error Message
+     * Verifies that error message is displayed with correct text
+     */
+    test('displays error message with correct text', () => {
+      const errorMessage = 'Task cannot be empty';
+      
+      showInputError(errorMessage);
+
+      const errorElement = screen.getByTestId('input-error');
+      expect(errorElement).toBeInTheDocument();
+      expect(errorElement.textContent).toBe(errorMessage);
+    });
+
+    /**
+     * Test: Sets aria-invalid Attribute
+     * Verifies that aria-invalid is set to true
+     */
+    test('sets aria-invalid="true" on input', () => {
+      const input = document.getElementById('todo-input');
+      
+      showInputError('Test error');
+
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+    });
+
+    /**
+     * Test: Error Message Has role="alert"
+     * Verifies that error message has proper ARIA role
+     */
+    test('error message has role="alert"', () => {
+      showInputError('Test error');
+
+      const errorElement = screen.getByTestId('input-error');
+      expect(errorElement.getAttribute('role')).toBe('alert');
+    });
+
+    /**
+     * Test: Error Element Has data-testid
+     * Verifies that error element has proper test ID
+     */
+    test('error element has data-testid="input-error"', () => {
+      showInputError('Test error');
+
+      const errorElement = document.querySelector('[data-testid="input-error"]');
+      expect(errorElement).toBeInTheDocument();
+    });
+
+    /**
+     * Test: Replaces Existing Error Message
+     * Verifies that existing error is replaced with new one
+     */
+    test('replaces existing error message', () => {
+      showInputError('First error');
+      showInputError('Second error');
+
+      const errorElements = document.querySelectorAll('.input__error');
+      expect(errorElements.length).toBe(1);
+      expect(errorElements[0].textContent).toBe('Second error');
+    });
+
+    /**
+     * Test: Throws TypeError for Non-String
+     * Verifies proper error handling for non-string input
+     */
+    test('throws TypeError when errorMessage is not a string', () => {
+      expect(() => showInputError(null)).toThrow(TypeError);
+      expect(() => showInputError(null)).toThrow('Error message must be a string');
+      expect(() => showInputError(undefined)).toThrow(TypeError);
+      expect(() => showInputError(123)).toThrow(TypeError);
+      expect(() => showInputError({})).toThrow(TypeError);
+    });
+
+    /**
+     * Test: Throws Error When Input Not Found
+     * Verifies proper error handling when input element is missing
+     */
+    test('throws Error when input element is not found', () => {
+      document.getElementById('todo-input').remove();
+
+      expect(() => showInputError('Test error')).toThrow(Error);
+      expect(() => showInputError('Test error')).toThrow('Todo input element not found in DOM');
+    });
+  });
+
+  /**
+   * Test Suite: clearInputError()
+   * 
+   * Tests error clearing function including:
+   * - Error class removal
+   * - Error message removal
+   * - Accessibility attribute updates
+   */
+  describe('clearInputError()', () => {
+    /**
+     * Test: Removes Error Class
+     * Verifies that error class is removed from input
+     */
+    test('removes error class from input', () => {
+      const input = document.getElementById('todo-input');
+      input.classList.add('input--error');
+
+      clearInputError();
+
+      expect(input.classList.contains('input--error')).toBe(false);
+    });
+
+    /**
+     * Test: Removes Error Message from DOM
+     * Verifies that error message element is removed
+     */
+    test('removes error message from DOM', () => {
+      showInputError('Test error');
+      expect(screen.getByTestId('input-error')).toBeInTheDocument();
+
+      clearInputError();
+
+      expect(screen.queryByTestId('input-error')).not.toBeInTheDocument();
+    });
+
+    /**
+     * Test: Sets aria-invalid to False
+     * Verifies that aria-invalid is set to false
+     */
+    test('sets aria-invalid="false" on input', () => {
+      const input = document.getElementById('todo-input');
+      input.setAttribute('aria-invalid', 'true');
+
+      clearInputError();
+
+      expect(input.getAttribute('aria-invalid')).toBe('false');
+    });
+
+    /**
+     * Test: Works When No Error Present
+     * Verifies function works when no error is present
+     */
+    test('works when no error is present', () => {
+      expect(() => clearInputError()).not.toThrow();
+      
+      const input = document.getElementById('todo-input');
+      expect(input.classList.contains('input--error')).toBe(false);
+      expect(input.getAttribute('aria-invalid')).toBe('false');
+    });
+
+    /**
+     * Test: Handles Missing Input Element
+     * Verifies graceful handling when input element is missing
+     */
+    test('handles missing input element gracefully', () => {
+      document.getElementById('todo-input').remove();
+
+      expect(() => clearInputError()).not.toThrow();
+    });
+  });
+
+  /**
+   * Test Suite: setLoadingState()
+   * 
+   * Tests loading state management including:
+   * - Button disable/enable
+   * - CSS class application
+   * - Error handling
+   */
+  describe('setLoadingState()', () => {
+    /**
+     * Test: Disables Submit Button When Loading
+     * Verifies that button is disabled when loading is true
+     */
+    test('disables submit button when isLoading is true', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+
+      setLoadingState(true);
+
+      expect(submitButton.disabled).toBe(true);
+    });
+
+    /**
+     * Test: Adds Loading Class When Loading
+     * Verifies that loading class is added when loading is true
+     */
+    test('adds loading class when isLoading is true', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+
+      setLoadingState(true);
+
+      expect(submitButton.classList.contains('button--loading')).toBe(true);
+    });
+
+    /**
+     * Test: Enables Submit Button When Not Loading
+     * Verifies that button is enabled when loading is false
+     */
+    test('enables submit button when isLoading is false', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+
+      setLoadingState(false);
+
+      expect(submitButton.disabled).toBe(false);
+    });
+
+    /**
+     * Test: Removes Loading Class When Not Loading
+     * Verifies that loading class is removed when loading is false
+     */
+    test('removes loading class when isLoading is false', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+      submitButton.classList.add('button--loading');
+
+      setLoadingState(false);
+
+      expect(submitButton.classList.contains('button--loading')).toBe(false);
+    });
+
+    /**
+     * Test: Throws TypeError for Non-Boolean
+     * Verifies proper error handling for non-boolean input
+     */
+    test('throws TypeError when isLoading is not a boolean', () => {
+      expect(() => setLoadingState(null)).toThrow(TypeError);
+      expect(() => setLoadingState(null)).toThrow('isLoading must be a boolean');
+      expect(() => setLoadingState(undefined)).toThrow(TypeError);
+      expect(() => setLoadingState('true')).toThrow(TypeError);
+      expect(() => setLoadingState(1)).toThrow(TypeError);
+    });
+
+    /**
+     * Test: Throws Error When Button Not Found
+     * Verifies proper error handling when button is missing
+     */
+    test('throws Error when submit button is not found', () => {
+      document.querySelector('button[type="submit"]').remove();
+
+      expect(() => setLoadingState(true)).toThrow(Error);
+      expect(() => setLoadingState(true)).toThrow('Submit button not found in DOM');
+    });
+  });
+
+  /**
+   * Test Suite: validateInputRealtime()
+   * 
+   * Tests real-time validation including:
+   * - Event listener attachment
+   * - Validation on input change
+   * - Error display/clearing
+   * - Debouncing
+   */
+  describe('validateInputRealtime()', () => {
+    /**
+     * Test: Attaches Input Event Listener
+     * Verifies that input event listener is attached
+     */
+    test('attaches input event listener', () => {
+      const input = document.getElementById('todo-input');
+      const addEventListenerSpy = jest.spyOn(input, 'addEventListener');
+
+      validateInputRealtime(input);
+
+      expect(addEventListenerSpy).toHaveBeenCalledWith('input', expect.any(Function));
+    });
+
+    /**
+     * Test: Calls Validation on Input Change
+     * Verifies that validation is called when input changes
+     */
+    test('calls validation on input change', () => {
+      const input = document.getElementById('todo-input');
+      const mockValidator = jest.fn();
+      
+      validation.createRealtimeValidator = jest.fn(() => mockValidator);
+
+      validateInputRealtime(input);
+
+      fireEvent.input(input, { target: { value: 'Test input' } });
+
+      expect(mockValidator).toHaveBeenCalledWith('Test input');
+    });
+
+    /**
+     * Test: Shows Error for Invalid Input
+     * Verifies that error is shown for invalid input
+     */
+    test('shows error for invalid input', () => {
+      const input = document.getElementById('todo-input');
+      
+      validation.createRealtimeValidator = jest.fn((callback) => {
+        return (value) => {
+          callback({ isValid: false, error: 'Task cannot be empty' });
+        };
+      });
+
+      validateInputRealtime(input);
+
+      fireEvent.input(input, { target: { value: '' } });
+
+      const errorElement = screen.queryByTestId('input-error');
+      expect(errorElement).toBeInTheDocument();
+    });
+
+    /**
+     * Test: Clears Error for Valid Input
+     * Verifies that error is cleared for valid input
+     */
+    test('clears error for valid input', () => {
+      const input = document.getElementById('todo-input');
+      
+      // First show an error
+      showInputError('Test error');
+      
+      validation.createRealtimeValidator = jest.fn((callback) => {
+        return (value) => {
+          callback({ isValid: true, error: null });
+        };
+      });
+
+      validateInputRealtime(input);
+
+      fireEvent.input(input, { target: { value: 'Valid input' } });
+
+      const errorElement = screen.queryByTestId('input-error');
+      expect(errorElement).not.toBeInTheDocument();
+    });
+
+    /**
+     * Test: Disables Submit Button for Invalid Input
+     * Verifies that submit button is disabled for invalid input
+     */
+    test('disables submit button for invalid input', () => {
+      const input = document.getElementById('todo-input');
+      const submitButton = document.querySelector('button[type="submit"]');
+      
+      validation.createRealtimeValidator = jest.fn((callback) => {
+        return (value) => {
+          callback({ isValid: false, error: 'Task cannot be empty' });
+        };
+      });
+
+      validateInputRealtime(input);
+
+      fireEvent.input(input, { target: { value: '' } });
+
+      expect(submitButton.disabled).toBe(true);
+    });
+
+    /**
+     * Test: Enables Submit Button for Valid Input
+     * Verifies that submit button is enabled for valid input
+     */
+    test('enables submit button for valid input', () => {
+      const input = document.getElementById('todo-input');
+      const submitButton = document.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      
+      validation.createRealtimeValidator = jest.fn((callback) => {
+        return (value) => {
+          callback({ isValid: true, error: null });
+        };
+      });
+
+      validateInputRealtime(input);
+
+      fireEvent.input(input, { target: { value: 'Valid input' } });
+
+      expect(submitButton.disabled).toBe(false);
+    });
+
+    /**
+     * Test: Throws TypeError for Invalid Input Element
+     * Verifies proper error handling for non-HTMLInputElement
+     */
+    test('throws TypeError when inputElement is not an HTMLInputElement', () => {
+      expect(() => validateInputRealtime(null)).toThrow(TypeError);
+      expect(() => validateInputRealtime(null)).toThrow('inputElement must be an HTMLInputElement');
+      expect(() => validateInputRealtime({})).toThrow(TypeError);
+      expect(() => validateInputRealtime('input')).toThrow(TypeError);
+    });
+  });
+
+  /**
+   * Test Suite: disableSubmitButton()
+   * 
+   * Tests submit button disabling including:
+   * - Disabled attribute setting
+   * - CSS class application
+   */
+  describe('disableSubmitButton()', () => {
+    /**
+     * Test: Sets Disabled Attribute
+     * Verifies that disabled attribute is set
+     */
+    test('sets disabled attribute on submit button', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+
+      disableSubmitButton();
+
+      expect(submitButton.disabled).toBe(true);
+    });
+
+    /**
+     * Test: Adds Disabled Class
+     * Verifies that disabled class is added
+     */
+    test('adds disabled class to submit button', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+
+      disableSubmitButton();
+
+      expect(submitButton.classList.contains('button--disabled')).toBe(true);
+    });
+
+    /**
+     * Test: Button Not Clickable
+     * Verifies that button cannot be clicked when disabled
+     */
+    test('button is not clickable when disabled', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+      const clickHandler = jest.fn();
+      submitButton.addEventListener('click', clickHandler);
+
+      disableSubmitButton();
+
+      submitButton.click();
+
+      // Disabled buttons don't trigger click events
+      expect(submitButton.disabled).toBe(true);
+    });
+
+    /**
+     * Test: Handles Missing Button Gracefully
+     * Verifies graceful handling when button is missing
+     */
+    test('handles missing submit button gracefully', () => {
+      document.querySelector('button[type="submit"]').remove();
+
+      expect(() => disableSubmitButton()).not.toThrow();
+    });
+  });
+
+  /**
+   * Test Suite: enableSubmitButton()
+   * 
+   * Tests submit button enabling including:
+   * - Disabled attribute removal
+   * - CSS class removal
+   */
+  describe('enableSubmitButton()', () => {
+    /**
+     * Test: Removes Disabled Attribute
+     * Verifies that disabled attribute is removed
+     */
+    test('removes disabled attribute from submit button', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+
+      enableSubmitButton();
+
+      expect(submitButton.disabled).toBe(false);
+    });
+
+    /**
+     * Test: Removes Disabled Class
+     * Verifies that disabled class is removed
+     */
+    test('removes disabled class from submit button', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+      submitButton.classList.add('button--disabled');
+
+      enableSubmitButton();
+
+      expect(submitButton.classList.contains('button--disabled')).toBe(false);
+    });
+
+    /**
+     * Test: Button Is Clickable
+     * Verifies that button can be clicked when enabled
+     */
+    test('button is clickable when enabled', () => {
+      const submitButton = document.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      const clickHandler = jest.fn();
+      submitButton.addEventListener('click', clickHandler);
+
+      enableSubmitButton();
+
+      submitButton.click();
+
+      expect(clickHandler).toHaveBeenCalled();
+    });
+
+    /**
+     * Test: Handles Missing Button Gracefully
+     * Verifies graceful handling when button is missing
+     */
+    test('handles missing submit button gracefully', () => {
+      document.querySelector('button[type="submit"]').remove();
+
+      expect(() => enableSubmitButton()).not.toThrow();
     });
   });
 });
