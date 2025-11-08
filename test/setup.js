@@ -245,6 +245,35 @@ global.testUtils = {
     const data = typeof value === 'string' ? value : JSON.stringify(value);
     localStorage.setItem(key, data);
   },
+
+  /**
+   * Advances all timers and flushes pending promises
+   * @returns {Promise<void>}
+   */
+  async flushTimers() {
+    jest.runAllTimers();
+    await Promise.resolve();
+  },
+
+  /**
+   * Waits for a toast notification with specific message to appear
+   * @param {string} message - Toast message to wait for
+   * @param {number} timeout - Maximum wait time in ms
+   * @returns {Promise<HTMLElement>} Toast element
+   */
+  async waitForToast(message, timeout = 1000) {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeout) {
+      const toasts = document.querySelectorAll('.toast');
+      for (const toast of toasts) {
+        if (toast.textContent.includes(message)) {
+          return toast;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    throw new Error(`Toast with message "${message}" not found within ${timeout}ms`);
+  },
 };
 
 /**
@@ -254,6 +283,9 @@ global.testUtils = {
  * Clears all mocks, storage, and DOM state.
  */
 beforeEach(() => {
+  // Use fake timers for consistent timer testing
+  jest.useFakeTimers();
+
   // Clear localStorage and sessionStorage
   localStorage.clear();
   sessionStorage.clear();
@@ -289,6 +321,34 @@ beforeEach(() => {
  * Runs after each test for additional cleanup and verification.
  */
 afterEach(() => {
+  // Clear all toast notifications from DOM
+  const toasts = document.querySelectorAll('.toast');
+  toasts.forEach(toast => toast.remove());
+
+  // Reset validation state
+  const inputs = document.querySelectorAll('input, textarea');
+  inputs.forEach(input => {
+    input.removeAttribute('aria-invalid');
+    input.classList.remove('error', 'invalid');
+  });
+
+  // Clear error messages
+  const errorMessages = document.querySelectorAll('.error-message, [role="alert"]');
+  errorMessages.forEach(msg => msg.remove());
+
+  // Clear loading states
+  const loadingElements = document.querySelectorAll('.loading, [data-loading="true"]');
+  loadingElements.forEach(el => {
+    el.classList.remove('loading');
+    el.removeAttribute('data-loading');
+  });
+
+  // Enable all buttons
+  const buttons = document.querySelectorAll('button');
+  buttons.forEach(button => {
+    button.disabled = false;
+  });
+
   // Verify no unhandled errors in console (optional, can be enabled per test)
   // if (global.consoleMock.errors.length > 0) {
   //   console.warn('Unhandled console errors:', global.consoleMock.errors);
@@ -296,6 +356,9 @@ afterEach(() => {
 
   // Restore any spies
   jest.restoreAllMocks();
+
+  // Restore real timers
+  jest.useRealTimers();
 });
 
 /**
@@ -380,6 +443,40 @@ expect.extend({
         pass
           ? `expected element not to have data-${attr}="${value}"`
           : `expected element to have data-${attr}="${value}", but got "${actualValue}"`,
+    };
+  },
+
+  /**
+   * Checks if a toast notification with specific message and type exists
+   * @param {string} message - Expected toast message
+   * @param {string} type - Expected toast type (success, error, info, warning)
+   * @returns {Object} Jest matcher result
+   */
+  toHaveToast(message, type) {
+    const toasts = document.querySelectorAll('.toast');
+    let found = false;
+    let foundToast = null;
+
+    for (const toast of toasts) {
+      const hasMessage = toast.textContent.includes(message);
+      const hasType = type ? toast.classList.contains(type) || toast.dataset.type === type : true;
+      
+      if (hasMessage && hasType) {
+        found = true;
+        foundToast = toast;
+        break;
+      }
+    }
+
+    const pass = found;
+    const typeStr = type ? ` with type "${type}"` : '';
+
+    return {
+      pass,
+      message: () =>
+        pass
+          ? `expected not to find toast with message "${message}"${typeStr}`
+          : `expected to find toast with message "${message}"${typeStr}, but ${toasts.length === 0 ? 'no toasts found' : `found ${toasts.length} toast(s) with different content`}`,
     };
   },
 });
@@ -469,6 +566,12 @@ if (global.window) {
     writable: true,
     configurable: true,
   });
+
+  // Mock window.addEventListener for error handler testing
+  const originalAddEventListener = window.addEventListener;
+  window.addEventListener = jest.fn((event, handler, options) => {
+    originalAddEventListener.call(window, event, handler, options);
+  });
 }
 
 // Log setup completion for debugging
@@ -479,4 +582,6 @@ if (process.env.DEBUG_TESTS === 'true') {
   console.log('  - Custom matchers registered');
   console.log('  - Global test utilities available');
   console.log('  - DOM environment configured');
+  console.log('  - Timer mocks configured');
+  console.log('  - Toast and validation cleanup hooks installed');
 }
